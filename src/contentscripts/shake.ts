@@ -163,13 +163,34 @@ async function sendRosenBridgeData(opts: {
  */
 async function fulfillShakedexAuction(proof: any, marketOrigin?: string) {
   await assertunLocked();
-  return post({
+  const tx: any = await post({
     type: MessageTypes.SEND_SHAKEDEX_FULFILL,
     payload: {
       proof,
-      marketOrigin,
+      marketOrigin: marketOrigin || window.location.origin,
     },
   });
+
+  return {
+    name: proof?.name,
+    fulfillmentTxHash: tx?.hash,
+    tx,
+  };
+}
+
+/**
+ * Compatibility alias expected by LearnHNS Market's browser-wallet adapter.
+ */
+async function fillShakedexAuction(proof: any, marketOrigin?: string) {
+  return fulfillShakedexAuction(proof, marketOrigin);
+}
+
+async function getCapabilities() {
+  return {
+    shakedexFill: true,
+    shakedexFinalize: false,
+    shakedexList: false,
+  };
 }
 
 /**
@@ -297,6 +318,7 @@ async function verifyWithName(msg: string, signature: string, name: string) {
  * Wallet Client
  */
 const wallet = {
+  getCapabilities,
   sign,
   signWithName,
   verify,
@@ -306,6 +328,7 @@ const wallet = {
   createReveal,
   send,
   sendRosenBridgeData,
+  fillShakedexAuction,
   fulfillShakedexAuction,
   sendOpen,
   sendBid,
@@ -412,5 +435,4 @@ export type TXTRecord = {
 }
 
 export type UpdateRecordType = DSRecord | NSRecord | GLUE4Record | GLUE6Record | SYNTH4Record | SYNTH6Record | TXTRecord;
-
 
