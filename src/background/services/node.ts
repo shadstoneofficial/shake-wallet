@@ -46,14 +46,15 @@ export default class NodeService extends GenericService {
 
   getLatestBlock = async () => {
     const blockchanInfo = await this.getBlockchainInfo();
-    const block = await this.getBlockByHeight(blockchanInfo!.result!.blocks);
+    const {blocks, mediantime} = blockchanInfo!.result!;
+    const block = await this.getBlockByHeight(blocks);
 
     const {hash, height, time} = block || {};
 
     return {
       hash,
-      height,
-      time,
+      height: height || blocks,
+      time: typeof mediantime === "number" ? mediantime : time,
     };
   };
 

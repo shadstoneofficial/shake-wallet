@@ -1348,7 +1348,7 @@ class WalletService extends GenericService {
     );
 
     if (!best) {
-      throw new Error("No Shakedex proof bid is mature yet.");
+      throw new Error(this.getShakedexMaturityError(data));
     }
 
     const nameInfo = await this.exec("node", "getNameInfo", proof.name);
@@ -1456,6 +1456,19 @@ class WalletService extends GenericService {
     }
 
     return null;
+  };
+
+  getShakedexMaturityError = (data: any[]) => {
+    const nextBid = data
+      .filter(bid => typeof bid?.lockTime === "number" && bid.lockTime > 0)
+      .sort((a, b) => a.lockTime - b.lockTime)[0];
+
+    if (!nextBid) {
+      return "No Shakedex proof bid is mature yet.";
+    }
+
+    const unlockAt = new Date(nextBid.lockTime * 1000).toISOString();
+    return `No Shakedex proof bid is mature yet. Next proof bid unlocks at ${unlockAt}.`;
   };
 
   createShakedexBaseMTX = (proof: any, bid: any, lockScriptCoin: any) => {
