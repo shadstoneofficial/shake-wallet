@@ -65,6 +65,10 @@ function installLearnHNSMarketHandler() {
       return;
     }
 
+    if (link.hasAttribute("data-shake-wallet-ignore")) {
+      return;
+    }
+
     event.preventDefault();
     event.stopPropagation();
 
