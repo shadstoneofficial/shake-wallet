@@ -35,6 +35,7 @@ const actionToTitle: {
   REVEAL: "Confirm Reveal",
   REDEEM: "Confirm Redeem",
   REGISTER: "Confirm Register",
+  TRANSFER: "Confirm Shakedex Buy",
   UPDATE: "Confirm Update"
 };
 
@@ -374,9 +375,17 @@ function ConfirmContent(props: {hash: string}): ReactElement {
     case "REVEAL":
     case "REDEEM":
     case "OPEN":
+    case "TRANSFER":
       return (
         <>
           <Input label="TLD" value={name} spellCheck={false} disabled />
+          {action === "TRANSFER" && (
+            <Input
+              label="Purchase Amount"
+              value={fromDollaryDoos(Math.abs(value), 6)}
+              disabled
+            />
+          )}
           <Input
             label="Estimated Fee"
             value={fromDollaryDoos(pendingTx.fee, 6)}

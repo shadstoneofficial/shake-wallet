@@ -87,6 +87,7 @@ enum MessageTypes {
   SEND_TX = "send_tx",
   SEND_UPDATE = "send_update",
   SEND_ROSEN_BRIDGE_DATA = "send_rosen_bridge_data",
+  SEND_SHAKEDEX_FULFILL = "send_shakedex_fulfill",
 
   POPUP_LOADED = "popup_loaded",
 }

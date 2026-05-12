@@ -61,6 +61,9 @@ const bdb = require("bdb");
 const DB = require("bdb/lib/db");
 const layout = require("hsd/lib/wallet/layout").txdb;
 const {Resource} = require("hsd/lib/dns/resource");
+const Opcode = require("hsd/lib/script/opcode");
+const Script = require("hsd/lib/script/script");
+const scriptCommon = require("hsd/lib/script/common");
 
 const {Device} = USB;
 const blake2b = require("bcrypto/lib/blake2b");
@@ -69,11 +72,29 @@ const Witness = require("hsd/lib/script/witness");
 const Coin = require("hsd/lib/primitives/coin");
 
 const {types, typesByVal} = rules;
+const {SINGLEREVERSE, ANYONECANPAY} = scriptCommon.hashType;
 const networkType = process.env.NETWORK_TYPE || "main";
 
 const LOOKAHEAD = 100;
 const ONE_MINUTE = 60000;
 const MAGIC_STRING = `handshake signed message:\n`;
+
+function createShakedexLockScript(pubKey: Buffer) {
+  return new Script([
+    Opcode.fromSymbol("type"),
+    Opcode.fromInt(types.TRANSFER),
+    Opcode.fromSymbol("equal"),
+
+    Opcode.fromSymbol("if"),
+    Opcode.fromPush(pubKey),
+    Opcode.fromSymbol("checksig"),
+    Opcode.fromSymbol("else"),
+    Opcode.fromSymbol("type"),
+    Opcode.fromInt(types.FINALIZE),
+    Opcode.fromSymbol("equal"),
+    Opcode.fromSymbol("endif"),
+  ]);
+}
 
 declare interface WalletService {
   transactions?: any[] | null;
@@ -1274,6 +1295,236 @@ class WalletService extends GenericService {
     } catch (e) {
       console.error('[Rosen Bridge] Finalize error:', e);
       throw new Error(`Failed to finalize transaction: ${e.message}`);
+    }
+  };
+
+  createShakedexFulfill = async (opts: {
+    proof: any;
+    marketOrigin?: string;
+    rate?: number;
+  }) => {
+    const {proof, marketOrigin, rate} = opts || {};
+
+    if (!proof || typeof proof !== "object") {
+      throw new Error("Shakedex proof is required.");
+    }
+
+    if (typeof proof.version !== "number" || proof.version < 2) {
+      throw new Error("Unsupported Shakedex proof version.");
+    }
+
+    if (!rules.verifyName(proof.name)) {
+      throw new Error("Invalid Shakedex proof name.");
+    }
+
+    const data = Array.isArray(proof.data) ? proof.data : [];
+    if (!data.length) {
+      throw new Error("Shakedex proof does not contain any bids.");
+    }
+
+    const walletId = this.selectedID;
+    const wallet = await this.wdb.get(walletId);
+    const latestBlockNow = await this.exec("node", "getLatestBlock");
+    this.wdb.height = latestBlockNow.height;
+
+    const lockScriptCoin = await this.getShakedexLockingCoin(
+      proof,
+      marketOrigin
+    );
+
+    if (lockScriptCoin.covenant.type !== types.FINALIZE) {
+      throw new Error("Shakedex locking coin is not a finalized name.");
+    }
+
+    if (lockScriptCoin.covenant.items[2].toString("ascii") !== proof.name) {
+      throw new Error("Shakedex locking coin does not match the proof name.");
+    }
+
+    const best = await this.getBestShakedexBid(
+      proof,
+      data,
+      lockScriptCoin,
+      latestBlockNow
+    );
+
+    if (!best) {
+      throw new Error("No Shakedex proof bid is mature yet.");
+    }
+
+    const nameInfo = await this.exec("node", "getNameInfo", proof.name);
+    const nameState = nameInfo?.result?.info;
+
+    if (!nameState || typeof nameState.height !== "number") {
+      throw new Error("Could not load name state for Shakedex proof.");
+    }
+
+    const recipientAddress = await wallet.receiveAddress(0);
+    const mtx = this.createShakedexBaseMTX(proof, best, lockScriptCoin);
+    const transferOutput = mtx.outputs[0];
+
+    transferOutput.value = lockScriptCoin.value;
+    transferOutput.address = lockScriptCoin.address;
+    transferOutput.covenant.pushHash(rules.hashName(proof.name));
+    transferOutput.covenant.pushU32(nameState.height);
+    transferOutput.covenant.pushU8(recipientAddress.version);
+    transferOutput.covenant.push(recipientAddress.hash);
+
+    const lockScriptInputClone = mtx.inputs[0].clone();
+    await wallet.fill(mtx, {rate: rate || await this.getShakedexFeeRate()});
+    mtx.inputs[0].inject(lockScriptInputClone);
+
+    const outputs = mtx.outputs;
+    if (outputs.length === 3) {
+      mtx.outputs = [outputs[0], outputs[2], outputs[1]];
+    } else if (outputs.length === 4) {
+      mtx.outputs = [outputs[0], outputs[1], outputs[3], outputs[2]];
+    }
+
+    mtx.checkInput(0, lockScriptCoin, ANYONECANPAY | SINGLEREVERSE);
+
+    return mtx.toJSON();
+  };
+
+  getShakedexLockingCoin = async (proof: any, marketOrigin?: string) => {
+    let coinJSON = null;
+
+    try {
+      coinJSON = await this.exec(
+        "node",
+        "getCoin",
+        proof.lockingTxHash,
+        proof.lockingOutputIdx
+      );
+    } catch (e) {
+      coinJSON = null;
+    }
+
+    if ((!coinJSON || coinJSON.error) && marketOrigin) {
+      coinJSON = await this.fetchLearnHNSListingCoin(
+        marketOrigin,
+        proof.name
+      );
+    }
+
+    if (!coinJSON || coinJSON.error) {
+      throw new Error("Could not load Shakedex locking coin.");
+    }
+
+    return new Coin().fromJSON(coinJSON);
+  };
+
+  fetchLearnHNSListingCoin = async (marketOrigin: string, name: string) => {
+    let url: URL;
+
+    try {
+      url = new URL(marketOrigin);
+    } catch (e) {
+      throw new Error("Invalid LearnHNS Market origin.");
+    }
+
+    if (!["https:", "http:"].includes(url.protocol)) {
+      throw new Error("Unsupported LearnHNS Market origin.");
+    }
+
+    const res = await fetch(
+      `${url.origin}/api/v2/listings/${encodeURIComponent(name)}/coin`
+    );
+
+    if (!res.ok) {
+      throw new Error("LearnHNS Market could not provide the listing coin.");
+    }
+
+    const payload = await res.json();
+    return payload.coin;
+  };
+
+  getBestShakedexBid = async (
+    proof: any,
+    data: any[],
+    lockScriptCoin: any,
+    latestBlock: {height: number; time: number}
+  ) => {
+    const sorted = [...data].sort((a, b) => b.price - a.price);
+
+    for (let i = sorted.length - 1; i >= 0; i--) {
+      const bid = sorted[i];
+      const mtx = this.createShakedexBaseMTX(proof, bid, lockScriptCoin);
+
+      if (mtx.isFinal(latestBlock.height, latestBlock.time)) {
+        return bid;
+      }
+    }
+
+    return null;
+  };
+
+  createShakedexBaseMTX = (proof: any, bid: any, lockScriptCoin: any) => {
+    if (typeof bid.price !== "number" || bid.price <= 0) {
+      throw new Error("Invalid Shakedex bid price.");
+    }
+
+    if (typeof bid.lockTime !== "number" || bid.lockTime < 0) {
+      throw new Error("Invalid Shakedex bid lock time.");
+    }
+
+    if (!bid.signature || typeof bid.signature !== "string") {
+      throw new Error("Shakedex bid is missing a signature.");
+    }
+
+    const fee = bid.fee || 0;
+    const lockScript = createShakedexLockScript(
+      Buffer.from(proof.publicKey, "hex")
+    );
+    const mtx = new MTX();
+
+    mtx.addCoin(lockScriptCoin);
+    mtx.addOutput(
+      new Output({
+        covenant: {
+          type: types.TRANSFER,
+          items: [],
+        },
+      })
+    );
+
+    if (fee > 0) {
+      if (!proof.feeAddr) {
+        throw new Error("Shakedex proof is missing a fee address.");
+      }
+
+      mtx.addOutput({
+        address: Address.fromString(proof.feeAddr, this.network.type),
+        value: fee,
+      });
+    }
+
+    mtx.addOutput(
+      new Output({
+        address: Address.fromString(proof.paymentAddr, this.network.type),
+        value: bid.price,
+      })
+    );
+
+    mtx.setLocktime(bid.lockTime, true);
+
+    const witness = new Witness([
+      Buffer.from(bid.signature, "hex"),
+      lockScript.encode(),
+    ]);
+    witness.compile();
+    mtx.inputs[0].witness = witness;
+    mtx.checkInput(0, lockScriptCoin, ANYONECANPAY | SINGLEREVERSE);
+
+    return mtx;
+  };
+
+  getShakedexFeeRate = async () => {
+    try {
+      const feeRes = await this.exec("node", "estimateSmartFee", 10);
+      const fee = Number(feeRes?.result?.fee || feeRes?.fee || 0);
+      return Math.max(fee, 5000);
+    } catch (e) {
+      return 5000;
     }
   };
 

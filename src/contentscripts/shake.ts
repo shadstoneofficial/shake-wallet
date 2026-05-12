@@ -157,6 +157,22 @@ async function sendRosenBridgeData(opts: {
 }
 
 /**
+ * Fulfill a Shakedex auction proof, as used by LearnHNS Market buy links.
+ * @param proof - Shakedex auction proof JSON
+ * @param marketOrigin - optional market origin for hosted coin lookup fallback
+ */
+async function fulfillShakedexAuction(proof: any, marketOrigin?: string) {
+  await assertunLocked();
+  return post({
+    type: MessageTypes.SEND_SHAKEDEX_FULFILL,
+    payload: {
+      proof,
+      marketOrigin,
+    },
+  });
+}
+
+/**
  * Event listener for when wallet is disconnected. Only invoked once.
  * @param callback - invoke when wallet is locked
  */
@@ -290,6 +306,7 @@ const wallet = {
   createReveal,
   send,
   sendRosenBridgeData,
+  fulfillShakedexAuction,
   sendOpen,
   sendBid,
   sendReveal,
@@ -395,7 +412,5 @@ export type TXTRecord = {
 }
 
 export type UpdateRecordType = DSRecord | NSRecord | GLUE4Record | GLUE6Record | SYNTH4Record | SYNTH6Record | TXTRecord;
-
-
 
 

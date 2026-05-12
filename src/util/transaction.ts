@@ -8,6 +8,7 @@ export function getTXValue(tx: Transaction|SignMessageRequest): number {
   let covAction = null;
   let covValue = 0;
   let totalValue = 0;
+  let externalValue = 0;
 
   for (let i = 0; i < tx.outputs.length; i++) {
     const output = tx.outputs[i];
@@ -22,6 +23,8 @@ export function getTXValue(tx: Transaction|SignMessageRequest): number {
     if (covenant.action === 'NONE') {
       if (output.path) {
         totalValue += output.value;
+      } else {
+        externalValue += output.value;
       }
       continue;
     }
@@ -56,6 +59,10 @@ export function getTXValue(tx: Transaction|SignMessageRequest): number {
 
   if (covAction === 'BID') {
     return -covValue;
+  }
+
+  if (covAction === 'TRANSFER') {
+    return externalValue;
   }
 
   // This TX was a covenant, return.
