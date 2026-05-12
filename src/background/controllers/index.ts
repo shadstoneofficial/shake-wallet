@@ -11,111 +11,7 @@ const controllers: {
   [type: string]: (app: AppService, message: MessageAction, sender: MessageSender) => Promise<any>;
 } = {
   [MessageTypes.POPUP_LOADED]: async (app, message, sender) => {
-    if (!pendingPopupRequest) {
-      return;
-    }
-
-    const { type, payload, resolve, reject } = pendingPopupRequest;
-    pendingPopupRequest = null; // Clear the pending request
-
-    let tx = null;
-    switch (type) {
-      case 'send':
-        app.exec("analytics", "track", {
-          name: "Shake Send",
-        });
-
-        const {amount, address} = payload;
-        tx = await app.exec("wallet", "createSend", {
-          rate: +toDollaryDoos(0.01),
-          outputs: [
-            {
-              value: +toDollaryDoos(amount || 0),
-              address: address,
-            },
-          ],
-        });
-
-        await app.exec("wallet", "addTxToQueue", tx);
-        break;
-      case 'open':
-        app.exec("analytics", "track", {
-          name: "Shake Open",
-        });
-
-        tx = await app.exec("wallet", "createOpen", payload);
-        await app.exec("wallet", "addTxToQueue", tx);
-        break;
-      case 'bid':
-        app.exec("analytics", "track", {
-          name: "Shake Bid",
-        });
-
-        tx = await app.exec("wallet", "createBid", payload);
-        await app.exec("wallet", "addTxToQueue", {
-          ...tx,
-          bid: payload.amount,
-        });
-        break;
-      case 'reveal':
-        app.exec("analytics", "track", {
-          name: "Shake Reveal",
-        });
-
-        tx = await app.exec("wallet", "createReveal", {
-          name: payload,
-        });
-
-        await app.exec("wallet", "addTxToQueue", tx);
-        break;
-      case 'update':
-        app.exec("analytics", "track", {
-          name: "Shake Update",
-        });
-
-        tx = await app.exec("wallet", "createUpdate", payload);
-
-        await app.exec("wallet", "addTxToQueue", tx);
-        break;
-      case 'redeem':
-        app.exec("analytics", "track", {
-          name: "Shake Redeem",
-        });
-
-        tx = await app.exec("wallet", "createRedeem", {
-          name: payload,
-        });
-
-        await app.exec("wallet", "addTxToQueue", tx);
-        break;
-      case 'rosen_bridge_data':
-        app.exec("analytics", "track", {
-          name: "Shake Rosen Bridge Data",
-        });
-
-        tx = await app.exec("wallet", "createRosenBridgeData", payload);
-
-        await app.exec("wallet", "addTxToQueue", tx);
-        break;
-      case 'shakedex_fulfill':
-        app.exec("analytics", "track", {
-          name: "Shake Shakedex Fulfill",
-        });
-
-        tx = await app.exec("wallet", "createShakedexFulfill", payload);
-
-        await app.exec("wallet", "addTxToQueue", tx);
-        break;
-    }
-
-    if (tx) {
-      chrome.windows.getAll({}, (windows) => {
-        const popup = windows.find(w => w.type === 'popup');
-        if (popup) {
-          closePopupOnAcceptOrReject(app, resolve, reject, popup, tx);
-        }
-      });
-    }
+    await processPendingPopupRequest(app);
   },
 
   [MessageTypes.CONNECT]: async (app, message) => {
@@ -372,7 +268,8 @@ const controllers: {
         }
 
         pendingPopupRequest = { type: 'shakedex_fulfill', payload: message.payload, resolve, reject };
-        await openPopup();
+        const popup = await openPopup();
+        await processPendingPopupRequest(app, popup);
       } catch (e) {
         reject(e);
       }
@@ -721,6 +618,109 @@ async function openPopup() {
   });
 
   return popup!;
+}
+
+async function processPendingPopupRequest(app: AppService, popup?: any) {
+  if (!pendingPopupRequest) {
+    return;
+  }
+
+  const {locked} = await app.exec("wallet", "getState");
+  if (locked) {
+    app.once("wallet.unlocked", async () => {
+      await processPendingPopupRequest(app, popup);
+    });
+    return;
+  }
+
+  const { type, payload, resolve, reject } = pendingPopupRequest;
+  pendingPopupRequest = null;
+
+  try {
+    const tx = await createPendingPopupTx(app, type, payload);
+
+    if (!tx) {
+      throw new Error("Unsupported pending wallet request.");
+    }
+
+    await app.exec("wallet", "addTxToQueue", tx);
+    const txPopup = popup || await openPopup();
+    closePopupOnAcceptOrReject(app, resolve, reject, txPopup, tx);
+  } catch (e: any) {
+    reject(e instanceof Error ? e : new Error(e?.message || "Could not create wallet transaction."));
+  }
+}
+
+async function createPendingPopupTx(app: AppService, type: string, payload: any) {
+  switch (type) {
+    case 'send':
+      app.exec("analytics", "track", {
+        name: "Shake Send",
+      });
+
+      const {amount, address} = payload;
+      return app.exec("wallet", "createSend", {
+        rate: +toDollaryDoos(0.01),
+        outputs: [
+          {
+            value: +toDollaryDoos(amount || 0),
+            address: address,
+          },
+        ],
+      });
+    case 'open':
+      app.exec("analytics", "track", {
+        name: "Shake Open",
+      });
+
+      return app.exec("wallet", "createOpen", payload);
+    case 'bid':
+      app.exec("analytics", "track", {
+        name: "Shake Bid",
+      });
+
+      const tx = await app.exec<any>("wallet", "createBid", payload);
+      return {
+        ...tx,
+        bid: payload.amount,
+      };
+    case 'reveal':
+      app.exec("analytics", "track", {
+        name: "Shake Reveal",
+      });
+
+      return app.exec("wallet", "createReveal", {
+        name: payload,
+      });
+    case 'update':
+      app.exec("analytics", "track", {
+        name: "Shake Update",
+      });
+
+      return app.exec("wallet", "createUpdate", payload);
+    case 'redeem':
+      app.exec("analytics", "track", {
+        name: "Shake Redeem",
+      });
+
+      return app.exec("wallet", "createRedeem", {
+        name: payload,
+      });
+    case 'rosen_bridge_data':
+      app.exec("analytics", "track", {
+        name: "Shake Rosen Bridge Data",
+      });
+
+      return app.exec("wallet", "createRosenBridgeData", payload);
+    case 'shakedex_fulfill':
+      app.exec("analytics", "track", {
+        name: "Shake Shakedex Fulfill",
+      });
+
+      return app.exec("wallet", "createShakedexFulfill", payload);
+    default:
+      return null;
+  }
 }
 
 function closePopupOnAcceptOrReject(
