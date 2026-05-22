@@ -12,6 +12,7 @@ import Name from "@src/ui/components/Name";
 import {useDispatch} from "react-redux";
 import {Loader} from "@src/ui/components/Loader";
 import {useHistory} from "react-router";
+import Icon from "@src/ui/components/Icon";
 const Network = require("hsd/lib/protocol/network");
 const networkType = process.env.NETWORK_TYPE || 'main';
 
@@ -31,7 +32,12 @@ export default function Domains(): ReactElement {
     <div className="domains">
       {domains.map((name) => <DomainRow key={name} name={name} />)}
       {fetching && <Loader size={3} />}
-      {!domains.length && !fetching && <div className="domains__empty">No domains</div>}
+      {!domains.length && !fetching && (
+        <div className="domains__empty">
+          <div>No domains found</div>
+          <small>Transferred a name here? Use Rescan to refresh wallet history.</small>
+        </div>
+      )}
     </div>
   );
 }
@@ -44,11 +50,15 @@ export function DomainRow(props: {name: string}): ReactElement {
   if (!domain) return <></>;
 
   const expiry = heightToMoment(domain.renewal + network.names.renewalWindow).format('YYYY-MM-DD');
+  const openDomain = () => history.push(`/domains/${props.name}`);
+  const statusText = domain?.ownerCovenantType === 'TRANSFER'
+    ? 'Finalize Pending'
+    : 'Registered';
 
   return (
     <div
       className="domain"
-      onClick={() => history.push(`/domains/${props.name}`)}
+      onClick={openDomain}
     >
       <div className="domain__info">
         <div className="domain__info__name">
@@ -56,7 +66,7 @@ export function DomainRow(props: {name: string}): ReactElement {
           {
             ['REGISTER', 'FINALIZE', 'RENEW', 'UPDATE', 'TRANSFER'].includes(domain?.ownerCovenantType || '') && (
               <div className="domain__info__name__status">
-                Registered
+                {statusText}
               </div>
             )
           }
@@ -66,9 +76,18 @@ export function DomainRow(props: {name: string}): ReactElement {
         </div>
       </div>
       <div className="domain__actions">
-        <div className="domain__actions__action">
-
-        </div>
+        <button
+          className="domain__actions__action"
+          type="button"
+          title={`Manage ${domain.name}`}
+          aria-label={`Manage ${domain.name}`}
+          onClick={(event) => {
+            event.stopPropagation();
+            openDomain();
+          }}
+        >
+          <Icon fontAwesome="fa-cog" size={1} />
+        </button>
       </div>
     </div>
   );

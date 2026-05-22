@@ -61,4 +61,17 @@
     margin-top: .125rem;
     flex: 0 0 auto;
   }
+
+  &__group {
+    @extend %col-nowrap;
+    align-items: center;
+  }
+
+  &__error {
+    @extend %small-font;
+    color: variables.$error-red !important;
+    margin-top: .35rem;
+    max-width: 8rem;
+    text-align: center;
+  }
 }

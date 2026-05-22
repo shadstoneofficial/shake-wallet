@@ -5,10 +5,19 @@ import {toDollaryDoos} from "@src/util/number";
 import MessageSender = chrome.runtime.MessageSender;
 
 let popupId: number | null = null;
-let pendingPopupRequest: { type: string, payload: any, resolve: (data: any) => void, reject: (err: Error) => void } | null = null;
+let pendingPopupRequest: {
+  type: string;
+  payload: any;
+  resolve: (data: any) => void;
+  reject: (err: Error) => void;
+} | null = null;
 
 const controllers: {
-  [type: string]: (app: AppService, message: MessageAction, sender: MessageSender) => Promise<any>;
+  [type: string]: (
+    app: AppService,
+    message: MessageAction,
+    sender: MessageSender
+  ) => Promise<any>;
 } = {
   [MessageTypes.POPUP_LOADED]: async (app, message, sender) => {
     await processPendingPopupRequest(app);
@@ -51,14 +60,16 @@ const controllers: {
     const {address, msg} = payload;
     return new Promise(async (resolve, reject) => {
       if (pendingPopupRequest !== null) {
-        return reject(new Error("Another transaction is already pending confirmation."));
+        return reject(
+          new Error("Another transaction is already pending confirmation.")
+        );
       }
 
-      app.exec('analytics', 'track', {
-        name: 'Shake Sign',
+      app.exec("analytics", "track", {
+        name: "Shake Sign",
       });
 
-      await app.exec('wallet', 'createSignMessageRequest', msg, address);
+      await app.exec("wallet", "createSignMessageRequest", msg, address);
 
       const popup = await openPopup();
       closePopupOnAcceptOrReject(app, resolve, reject, popup);
@@ -70,14 +81,22 @@ const controllers: {
     const {name, msg} = payload;
     return new Promise(async (resolve, reject) => {
       if (pendingPopupRequest !== null) {
-        return reject(new Error("Another transaction is already pending confirmation."));
+        return reject(
+          new Error("Another transaction is already pending confirmation.")
+        );
       }
 
-      app.exec('analytics', 'track', {
-        name: 'Shake Sign with Name',
+      app.exec("analytics", "track", {
+        name: "Shake Sign with Name",
       });
 
-      await app.exec('wallet', 'createSignMessageRequest', msg, undefined, name);
+      await app.exec(
+        "wallet",
+        "createSignMessageRequest",
+        msg,
+        undefined,
+        name
+      );
 
       const popup = await openPopup();
       closePopupOnAcceptOrReject(app, resolve, reject, popup);
@@ -94,10 +113,17 @@ const controllers: {
         }
 
         if (pendingPopupRequest !== null) {
-          return reject(new Error("Another transaction is already pending confirmation."));
+          return reject(
+            new Error("Another transaction is already pending confirmation.")
+          );
         }
 
-        pendingPopupRequest = { type: 'send', payload: message.payload, resolve, reject };
+        pendingPopupRequest = {
+          type: "send",
+          payload: message.payload,
+          resolve,
+          reject,
+        };
         await openPopup();
       } catch (e) {
         reject(e);
@@ -115,10 +141,17 @@ const controllers: {
         }
 
         if (pendingPopupRequest !== null) {
-          return reject(new Error("Another transaction is already pending confirmation."));
+          return reject(
+            new Error("Another transaction is already pending confirmation.")
+          );
         }
 
-        pendingPopupRequest = { type: 'open', payload: message.payload, resolve, reject };
+        pendingPopupRequest = {
+          type: "open",
+          payload: message.payload,
+          resolve,
+          reject,
+        };
         await openPopup();
       } catch (e) {
         reject(e);
@@ -136,10 +169,17 @@ const controllers: {
         }
 
         if (pendingPopupRequest !== null) {
-          return reject(new Error("Another transaction is already pending confirmation."));
+          return reject(
+            new Error("Another transaction is already pending confirmation.")
+          );
         }
 
-        pendingPopupRequest = { type: 'bid', payload: message.payload, resolve, reject };
+        pendingPopupRequest = {
+          type: "bid",
+          payload: message.payload,
+          resolve,
+          reject,
+        };
         await openPopup();
       } catch (e) {
         reject(e);
@@ -157,10 +197,17 @@ const controllers: {
         }
 
         if (pendingPopupRequest !== null) {
-          return reject(new Error("Another transaction is already pending confirmation."));
+          return reject(
+            new Error("Another transaction is already pending confirmation.")
+          );
         }
 
-        pendingPopupRequest = { type: 'reveal', payload: message.payload, resolve, reject };
+        pendingPopupRequest = {
+          type: "reveal",
+          payload: message.payload,
+          resolve,
+          reject,
+        };
         await openPopup();
       } catch (e) {
         reject(e);
@@ -178,10 +225,17 @@ const controllers: {
         }
 
         if (pendingPopupRequest !== null) {
-          return reject(new Error("Another transaction is already pending confirmation."));
+          return reject(
+            new Error("Another transaction is already pending confirmation.")
+          );
         }
 
-        pendingPopupRequest = { type: 'update', payload: message.payload, resolve, reject };
+        pendingPopupRequest = {
+          type: "update",
+          payload: message.payload,
+          resolve,
+          reject,
+        };
         await openPopup();
       } catch (e) {
         reject(e);
@@ -199,10 +253,17 @@ const controllers: {
         }
 
         if (pendingPopupRequest !== null) {
-          return reject(new Error("Another transaction is already pending confirmation."));
+          return reject(
+            new Error("Another transaction is already pending confirmation.")
+          );
         }
 
-        pendingPopupRequest = { type: 'redeem', payload: message.payload, resolve, reject };
+        pendingPopupRequest = {
+          type: "redeem",
+          payload: message.payload,
+          resolve,
+          reject,
+        };
         await openPopup();
       } catch (e) {
         reject(e);
@@ -220,10 +281,17 @@ const controllers: {
         }
 
         if (pendingPopupRequest !== null) {
-          return reject(new Error("Another transaction is already pending confirmation."));
+          return reject(
+            new Error("Another transaction is already pending confirmation.")
+          );
         }
 
-        pendingPopupRequest = { type: 'rosen_bridge_lock', payload: message.payload, resolve, reject };
+        pendingPopupRequest = {
+          type: "rosen_bridge_lock",
+          payload: message.payload,
+          resolve,
+          reject,
+        };
         const popup = await openPopup();
         closePopupOnAcceptOrReject(app, resolve, reject, popup);
       } catch (e) {
@@ -242,10 +310,17 @@ const controllers: {
         }
 
         if (pendingPopupRequest !== null) {
-          return reject(new Error("Another transaction is already pending confirmation."));
+          return reject(
+            new Error("Another transaction is already pending confirmation.")
+          );
         }
 
-        pendingPopupRequest = { type: 'rosen_bridge_data', payload: message.payload, resolve, reject };
+        pendingPopupRequest = {
+          type: "rosen_bridge_data",
+          payload: message.payload,
+          resolve,
+          reject,
+        };
         const popup = await openPopup();
         closePopupOnAcceptOrReject(app, resolve, reject, popup);
       } catch (e) {
@@ -264,10 +339,46 @@ const controllers: {
         }
 
         if (pendingPopupRequest !== null) {
-          return reject(new Error("Another transaction is already pending confirmation."));
+          return reject(
+            new Error("Another transaction is already pending confirmation.")
+          );
         }
 
-        pendingPopupRequest = { type: 'shakedex_fulfill', payload: message.payload, resolve, reject };
+        pendingPopupRequest = {
+          type: "shakedex_fulfill",
+          payload: message.payload,
+          resolve,
+          reject,
+        };
+        const popup = await openPopup();
+        await processPendingPopupRequest(app, popup);
+      } catch (e) {
+        reject(e);
+      }
+    });
+  },
+
+  [MessageTypes.SEND_SHAKEDEX_FINALIZE]: async (app, message) => {
+    return new Promise(async (resolve, reject) => {
+      try {
+        const queue = await app.exec("wallet", "getTxQueue");
+
+        if (queue.length) {
+          return reject(new Error("user has unconfirmed tx."));
+        }
+
+        if (pendingPopupRequest !== null) {
+          return reject(
+            new Error("Another transaction is already pending confirmation.")
+          );
+        }
+
+        pendingPopupRequest = {
+          type: "shakedex_finalize",
+          payload: message.payload,
+          resolve,
+          reject,
+        };
         const popup = await openPopup();
         await processPendingPopupRequest(app, popup);
       } catch (e) {
@@ -297,11 +408,7 @@ const controllers: {
   },
 
   [MessageTypes.CREATE_NEW_WALLET_ACCOUNT]: async (app, message) => {
-    return app.exec(
-      "wallet",
-      "createWalletAccount",
-      message.payload
-    );
+    return app.exec("wallet", "createWalletAccount", message.payload);
   },
 
   [MessageTypes.GET_WALLETS_INFO]: async (app, message) => {
@@ -485,6 +592,10 @@ const controllers: {
     return app.exec("wallet", "createBid", message.payload);
   },
 
+  [MessageTypes.CREATE_FINALIZE]: async (app, message) => {
+    return app.exec("wallet", "createFinalize", message.payload);
+  },
+
   [MessageTypes.CREATE_REVEAL]: async (app, message) => {
     return app.exec("wallet", "createReveal", message.payload);
   },
@@ -531,14 +642,14 @@ const controllers: {
 
   [MessageTypes.VERIFY_MESSAGE]: async (app, message) => {
     const {payload} = message;
-    const {msg,signature,address} = payload;
-    return app.exec('node', 'verifyMessage', msg, signature, address);
+    const {msg, signature, address} = payload;
+    return app.exec("node", "verifyMessage", msg, signature, address);
   },
 
   [MessageTypes.VERIFY_MESSAGE_WITH_NAME]: async (app, message) => {
     const {payload} = message;
-    const {msg,signature,name} = payload;
-    return app.exec('node', 'verifyMessageWithName', msg, signature, name);
+    const {msg, signature, name} = payload;
+    return app.exec("node", "verifyMessageWithName", msg, signature, name);
   },
 
   [MessageTypes.GET_API]: async (app, message) => {
@@ -577,6 +688,28 @@ const controllers: {
     return app.exec("setting", "setExplorer", message.payload);
   },
 
+  [MessageTypes.GET_SHAKEDEX_CHANNEL]: async (app, message) => {
+    return app.exec("setting", "getShakedexChannel");
+  },
+
+  [MessageTypes.SET_SHAKEDEX_CHANNEL]: async (app, message) => {
+    return app.exec("setting", "setShakedexChannel", message.payload);
+  },
+
+  [MessageTypes.GET_SECURITY_LOCK_TIMEOUT]: async (app, message) => {
+    return app.exec("setting", "getSecurityLockTimeout");
+  },
+
+  [MessageTypes.SET_SECURITY_LOCK_TIMEOUT]: async (app, message) => {
+    const timeout = await app.exec(
+      "setting",
+      "setSecurityLockTimeout",
+      message.payload
+    );
+    await app.exec("wallet", "refreshUnlockSession");
+    return timeout;
+  },
+
   [MessageTypes.MP_TRACK]: async (app, message) => {
     return app.exec(
       "analytics",
@@ -585,14 +718,13 @@ const controllers: {
       message.payload.data
     );
   },
-
 };
 
 async function openPopup() {
   if (popupId) {
     try {
       const w = await chrome.windows.get(popupId);
-      await chrome.windows.update(popupId, { focused: true });
+      await chrome.windows.update(popupId, {focused: true});
       return w;
     } catch (e) {
       // Window was closed by the user.
@@ -633,7 +765,7 @@ async function processPendingPopupRequest(app: AppService, popup?: any) {
     return;
   }
 
-  const { type, payload, resolve, reject } = pendingPopupRequest;
+  const {type, payload, resolve, reject} = pendingPopupRequest;
   pendingPopupRequest = null;
 
   try {
@@ -644,16 +776,24 @@ async function processPendingPopupRequest(app: AppService, popup?: any) {
     }
 
     await app.exec("wallet", "addTxToQueue", tx);
-    const txPopup = popup || await openPopup();
+    const txPopup = popup || (await openPopup());
     closePopupOnAcceptOrReject(app, resolve, reject, txPopup, tx);
   } catch (e: any) {
-    reject(e instanceof Error ? e : new Error(e?.message || "Could not create wallet transaction."));
+    reject(
+      e instanceof Error
+        ? e
+        : new Error(e?.message || "Could not create wallet transaction.")
+    );
   }
 }
 
-async function createPendingPopupTx(app: AppService, type: string, payload: any) {
+async function createPendingPopupTx(
+  app: AppService,
+  type: string,
+  payload: any
+) {
   switch (type) {
-    case 'send':
+    case "send":
       app.exec("analytics", "track", {
         name: "Shake Send",
       });
@@ -668,13 +808,13 @@ async function createPendingPopupTx(app: AppService, type: string, payload: any)
           },
         ],
       });
-    case 'open':
+    case "open":
       app.exec("analytics", "track", {
         name: "Shake Open",
       });
 
       return app.exec("wallet", "createOpen", payload);
-    case 'bid':
+    case "bid":
       app.exec("analytics", "track", {
         name: "Shake Bid",
       });
@@ -684,7 +824,7 @@ async function createPendingPopupTx(app: AppService, type: string, payload: any)
         ...tx,
         bid: payload.amount,
       };
-    case 'reveal':
+    case "reveal":
       app.exec("analytics", "track", {
         name: "Shake Reveal",
       });
@@ -692,13 +832,13 @@ async function createPendingPopupTx(app: AppService, type: string, payload: any)
       return app.exec("wallet", "createReveal", {
         name: payload,
       });
-    case 'update':
+    case "update":
       app.exec("analytics", "track", {
         name: "Shake Update",
       });
 
       return app.exec("wallet", "createUpdate", payload);
-    case 'redeem':
+    case "redeem":
       app.exec("analytics", "track", {
         name: "Shake Redeem",
       });
@@ -706,18 +846,24 @@ async function createPendingPopupTx(app: AppService, type: string, payload: any)
       return app.exec("wallet", "createRedeem", {
         name: payload,
       });
-    case 'rosen_bridge_data':
+    case "rosen_bridge_data":
       app.exec("analytics", "track", {
         name: "Shake Rosen Bridge Data",
       });
 
       return app.exec("wallet", "createRosenBridgeData", payload);
-    case 'shakedex_fulfill':
+    case "shakedex_fulfill":
       app.exec("analytics", "track", {
         name: "Shake Shakedex Fulfill",
       });
 
       return app.exec("wallet", "createShakedexFulfill", payload);
+    case "shakedex_finalize":
+      app.exec("analytics", "track", {
+        name: "Shake Shakedex Finalize",
+      });
+
+      return app.exec("wallet", "createFinalize", payload);
     default:
       return null;
   }

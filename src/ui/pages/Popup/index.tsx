@@ -17,7 +17,7 @@ import {useLedgerConnect} from "@src/ui/ducks/ledger";
 import AppHeader from "@src/ui/components/AppHeader";
 import Login from "@src/ui/pages/Login";
 import {Redirect, Route, Switch} from "react-router";
-import ShakeMoveIcon from "@src/static/icons/shake-moves.svg";
+import WalletMoveIcon from "@src/static/icons/learnhns-animated.svg";
 import Icon from "@src/ui/components/Icon";
 import Home from "@src/ui/pages/Home";
 import {fetchLatestBlock} from "@src/ui/ducks/node";
@@ -27,12 +27,17 @@ import MessageTypes from "@src/util/messageTypes";
 import ConfirmTx from "@src/ui/pages/ConfirmTx";
 import postMessage from "@src/util/postMessage";
 import {useTXQueue} from "@src/ui/ducks/queue";
-import {fetchMultiAccountsEnabled, fetchExplorer} from "@src/ui/ducks/app";
+import {
+  fetchMultiAccountsEnabled,
+  fetchExplorer,
+  useSubmittedTx,
+} from "@src/ui/ducks/app";
 import Settings from "@src/ui/pages/Settings";
 import DomainPage from "@src/ui/pages/Domain";
 import ConfirmLedger from "@src/ui/pages/ConfirmLedger";
 import CreateAccount from "@src/ui/pages/CreateAccount";
 import AccountInfo from "@src/ui/pages/AccountInfo";
+import SellListing from "@src/ui/pages/SellListing";
 
 export default function Popup(): ReactElement {
   const dispatch = useDispatch();
@@ -40,6 +45,7 @@ export default function Popup(): ReactElement {
   const currentAccount = useCurrentAccount();
   const {locked, currentWallet} = useWalletState();
   const queuedTXHashes = useTXQueue();
+  const submittedTx = useSubmittedTx();
   const ledgerConnect = useLedgerConnect();
   const [loading, setLoading] = useState(true);
   const [darkTheme, setDarkTheme] = useState(true);
@@ -94,13 +100,18 @@ export default function Popup(): ReactElement {
   if (loading) {
     return (
       <div className={`popup__loading ${theme}`}>
-        <Icon url={ShakeMoveIcon} size={4} />
+        <Icon url={WalletMoveIcon} size={4} />
         <small>Initializing...</small>
       </div>
     );
   }
 
-  if (initialized && !locked && !ledgerConnect && queuedTXHashes.length) {
+  if (
+    initialized &&
+    !locked &&
+    !ledgerConnect &&
+    (queuedTXHashes.length || submittedTx)
+  ) {
     return (
       <div className={`popup ${theme}`}>
         <AppHeader />
@@ -170,6 +181,9 @@ export default function Popup(): ReactElement {
         </Route>
         <Route path="/settings">
           <Settings />
+        </Route>
+        <Route path="/marketplace/sell">
+          <SellListing />
         </Route>
         <Route path="/domains/:name">
           <DomainPage />

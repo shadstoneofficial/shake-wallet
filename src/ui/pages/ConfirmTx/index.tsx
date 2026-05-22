@@ -4,6 +4,7 @@ import {useQueuedTXByHash, useTXQueue} from "@src/ui/ducks/queue";
 import Button, {ButtonType} from "@src/ui/components/Button";
 import {getTXAction, getTXNameHash, getTXRecipient, getTXRecords, getTXValue} from "@src/util/transaction";
 import {fetchPendingTransactions, SignMessageRequest, Transaction} from "@src/ui/ducks/transactions";
+import {useWalletState} from "@src/ui/ducks/wallet";
 import Input from "@src/ui/components/Input";
 import {formatNumber, fromDollaryDoos} from "@src/util/number";
 import postMessage from "@src/util/postMessage";
@@ -14,7 +15,12 @@ import Textarea from "@src/ui/components/Textarea";
 import {toBIND} from "@src/util/records";
 import ErrorMessage from "@src/ui/components/ErrorMessage";
 import {getExplorerUrl} from "@src/util/explorer";
-import {useExplorer} from "@src/ui/ducks/app";
+import {
+  clearSubmittedTx,
+  setSubmittedTx,
+  useExplorer,
+  useSubmittedTx,
+} from "@src/ui/ducks/app";
 import {
   RegularView,
   RegularViewContent,
@@ -35,6 +41,7 @@ const actionToTitle: {
   REVEAL: "Confirm Reveal",
   REDEEM: "Confirm Redeem",
   REGISTER: "Confirm Register",
+  FINALIZE: "Confirm Finalize",
   TRANSFER: "Confirm Shakedex Buy",
   UPDATE: "Confirm Update"
 };
@@ -43,11 +50,17 @@ export default function ConfirmTx(): ReactElement {
   const pendingTXHashes = useTXQueue();
   const [currentIndex, setCurrentIndex] = useState(0);
   const pendingTx = useQueuedTXByHash(pendingTXHashes[currentIndex]);
-  const action = getTXAction(pendingTx);
+  const action = pendingTx ? getTXAction(pendingTx) : "";
   const [isUpdating, setUpdating] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPasswordPrompt, setShowPasswordPrompt] = useState(false);
   const dispatch = useDispatch();
+  const {watchOnly} = useWalletState();
+  const shouldRequestPassword = !watchOnly;
+  const explorer = useExplorer();
+  const submittedTx = useSubmittedTx();
 
   useEffect(() => {
     postMessage({
@@ -62,20 +75,62 @@ export default function ConfirmTx(): ReactElement {
   }, []);
 
   const submitTx = useCallback(async (txJSON: Transaction|SignMessageRequest) => {
+    if (shouldRequestPassword && !password) {
+      setShowPasswordPrompt(true);
+      setErrorMessage("");
+      return;
+    }
+
     setConfirming(true);
+    setErrorMessage("");
+
+    const queuedTxHash = !txJSON.method ? txJSON.hash : "";
+
+    if (queuedTxHash) {
+      dispatch(setSubmittedTx({
+        hash: queuedTxHash,
+        action: getTXAction(txJSON),
+        status: "broadcasting",
+      }));
+    }
 
     try {
-      await postMessage({
+      if (password) {
+        await postMessage({
+          type: MessageTypes.UNLOCK_WALLET,
+          payload: password,
+        });
+      }
+      const submittedTx = await postMessage({
         type: MessageTypes.SUBMIT_TX,
         payload: {txJSON},
       });
+      setPassword("");
+      setShowPasswordPrompt(false);
+      const broadcastHash = submittedTx?.hash || txJSON.hash || "";
+      if (broadcastHash) {
+        dispatch(setSubmittedTx({
+          hash: broadcastHash,
+          action: getTXAction(txJSON),
+          status: "submitted",
+        }));
+      }
       await dispatch(fetchPendingTransactions());
     } catch (e: any) {
-      setErrorMessage(e.message);
+      if (queuedTxHash) {
+        dispatch(clearSubmittedTx());
+      }
+
+      if (/passphrase/i.test(e.message || "")) {
+        setShowPasswordPrompt(true);
+        setErrorMessage("Enter your wallet password to sign this transaction.");
+      } else {
+        setErrorMessage(e.message);
+      }
     }
 
     setConfirming(false);
-  }, []);
+  }, [password, shouldRequestPassword]);
 
   const removeTx = useCallback((txJSON: Transaction|SignMessageRequest) => {
     return postMessage({
@@ -83,6 +138,115 @@ export default function ConfirmTx(): ReactElement {
       payload: txJSON,
     });
   }, []);
+
+  if (submittedTx?.hash) {
+    const explorerUrl = getExplorerUrl(explorer, "tx", submittedTx.hash);
+
+    return (
+      <RegularView className="confirm-tx">
+        <RegularViewHeader>Broadcast Pending</RegularViewHeader>
+        <RegularViewContent>
+          <div className="confirm-tx__success">
+            <div className="confirm-tx__success__title">
+              {submittedTx.status === "submitted"
+                ? "Transaction submitted"
+                : "Broadcasting transaction"}
+            </div>
+            <div className="confirm-tx__success__body">
+              {submittedTx.status === "submitted"
+                ? "Your transaction was broadcast and is waiting for confirmation."
+                : "Your wallet is sending this transaction to the Handshake network."}
+            </div>
+            <a
+              className="confirm-tx__success__link"
+              href={explorerUrl}
+              target="_blank"
+              rel="noreferrer"
+            >
+              View on {explorer.label}
+            </a>
+            <div className="confirm-tx__success__hash">
+              {submittedTx.hash}
+            </div>
+          </div>
+        </RegularViewContent>
+        <RegularViewFooter>
+          <Button
+            btnType={ButtonType.secondary}
+            onClick={() => navigator.clipboard?.writeText(submittedTx.hash)}
+          >
+            Copy Hash
+          </Button>
+          <Button onClick={() => dispatch(clearSubmittedTx())}>
+            Done
+          </Button>
+        </RegularViewFooter>
+      </RegularView>
+    );
+  }
+
+  if (!pendingTx) {
+    return <></>;
+  }
+
+  if (!pendingTx.method && showPasswordPrompt) {
+    return (
+      <RegularView className="confirm-tx">
+        <RegularViewHeader>Unlock Wallet</RegularViewHeader>
+        <RegularViewContent>
+          <div className="confirm-tx__unlock-summary">
+            <div className="confirm-tx__unlock-summary__title">
+              Confirm Shakedex buy
+            </div>
+            <div className="confirm-tx__unlock-summary__name">
+              {pendingTx.shakedexFulfill
+                ? `${toUnicode(pendingTx.shakedexFulfill.name)}/`
+                : toUnicode(getTXRecipient(pendingTx) || getTXNameHash(pendingTx) || "")}
+            </div>
+            <PaymentTotal hash={pendingTXHashes[currentIndex]} />
+          </div>
+          <Input
+            className="confirm-tx__password confirm-tx__password--visible"
+            label="Wallet Password"
+            value={password}
+            type="password"
+            autoFocus
+            onChange={(e) => {
+              setPassword(e.target.value);
+              setErrorMessage("");
+            }}
+            onKeyPress={(e) => {
+              if (e.key === "Enter" || e.key === "NumpadEnter") {
+                submitTx(pendingTx);
+              }
+            }}
+          />
+        </RegularViewContent>
+
+        {errorMessage && <ErrorMessage>{errorMessage}</ErrorMessage>}
+
+        <RegularViewFooter>
+          <Button
+            btnType={ButtonType.secondary}
+            onClick={() => {
+              setShowPasswordPrompt(false);
+              setPassword("");
+              setErrorMessage("");
+            }}
+          >
+            Back
+          </Button>
+          <Button
+            onClick={() => submitTx(pendingTx)}
+            disabled={confirming}
+            loading={confirming}
+          >
+            Confirm
+          </Button>
+        </RegularViewFooter>
+      </RegularView>
+    );
+  }
 
   if (isUpdating) {
     return (
@@ -175,16 +339,36 @@ export default function ConfirmTx(): ReactElement {
 }
 
 function NetTotal(props: {hash: string}): ReactElement {
+  return <PaymentTotal hash={props.hash} />;
+}
+
+function PaymentTotal(props: {hash: string}): ReactElement {
   const pendingTx = useQueuedTXByHash(props.hash);
   const value = getTXValue(pendingTx);
   const action = getTXAction(pendingTx);
+  const shakedexPurchaseTotal = pendingTx?.shakedexFulfill
+    ? pendingTx.shakedexFulfill.price + (pendingTx.shakedexFulfill.fee || 0)
+    : null;
 
   if (pendingTx.method) return <></>;
+
+  if (shakedexPurchaseTotal !== null) {
+    return (
+      <div className="confirm-tx__total-group">
+        <div className="confirm-tx__total-group__label">You Pay:</div>
+        <div className="confirm-tx__total-group__amount">
+          -{formatNumber(fromDollaryDoos(shakedexPurchaseTotal + pendingTx.fee, 6))}{" "}
+          HNS
+        </div>
+      </div>
+    );
+  }
 
   switch (action) {
     case "REVEAL":
     case "REDEEM":
     case "REGISTER":
+    case "FINALIZE":
       return (
         <div className="confirm-tx__total-group">
           <div className="confirm-tx__total-group__label">Net Total:</div>
@@ -379,13 +563,42 @@ function ConfirmContent(props: {hash: string}): ReactElement {
       return (
         <>
           <Input label="TLD" value={name} spellCheck={false} disabled />
-          {action === "TRANSFER" && (
-            <Input
-              label="Purchase Amount"
-              value={fromDollaryDoos(Math.abs(value), 6)}
-              disabled
-            />
+          {pendingTx.shakedexFulfill ? (
+            <>
+              <Input
+                label="Purchase Price"
+                value={fromDollaryDoos(pendingTx.shakedexFulfill.price, 6)}
+                disabled
+              />
+              <Input
+                label="Seller Payment"
+                value={pendingTx.shakedexFulfill.sellerAddress || ""}
+                disabled
+              />
+              <div className="confirm-tx__notice">
+                Your wallet may use a larger coin as an input, but change returns to your wallet. The amount paid to the seller is the purchase price above.
+              </div>
+            </>
+          ) : (
+            action === "TRANSFER" && (
+              <Input
+                label="Transfer Amount"
+                value={fromDollaryDoos(Math.abs(value), 6)}
+                disabled
+              />
+            )
           )}
+          <Input
+            label="Estimated Fee"
+            value={fromDollaryDoos(pendingTx.fee, 6)}
+            disabled
+          />
+        </>
+      );
+    case "FINALIZE":
+      return (
+        <>
+          <Input label="TLD" value={name} spellCheck={false} disabled />
           <Input
             label="Estimated Fee"
             value={fromDollaryDoos(pendingTx.fee, 6)}

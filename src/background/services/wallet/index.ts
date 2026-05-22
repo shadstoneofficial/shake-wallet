@@ -78,6 +78,13 @@ const networkType = process.env.NETWORK_TYPE || "main";
 const LOOKAHEAD = 100;
 const ONE_MINUTE = 60000;
 const MAGIC_STRING = `handshake signed message:\n`;
+const SELECTED_WALLET_DB_KEY = "selected_wallet";
+
+interface UnlockSession {
+  walletId: string;
+  passphrase: string;
+  expiresAt: number;
+}
 
 function createShakedexLockScript(pubKey: Buffer) {
   return new Script([
@@ -116,6 +123,8 @@ class WalletService extends GenericService {
   store: typeof DB;
 
   private passphrase: string | undefined;
+  private unlockTimer: any;
+  private unlockSession: UnlockSession | undefined;
 
   constructor() {
     super();
@@ -136,6 +145,7 @@ class WalletService extends GenericService {
     this.emit("locked");
     this.passphrase = undefined;
     this.locked = true;
+    await this.clearUnlockSession();
   };
 
   unlockWallet = async (password: string) => {
@@ -144,8 +154,91 @@ class WalletService extends GenericService {
     this.passphrase = password;
     this.locked = false;
     await wallet.lock();
+    await this.persistUnlockSession(password);
     this.emit("unlocked", this.selectedID);
     this.checkForRescan();
+  };
+
+  getUnlockTimeoutMinutes = async () => {
+    try {
+      return await this.exec("setting", "getSecurityLockTimeout");
+    } catch (e) {
+      return 15;
+    }
+  };
+
+  persistUnlockSession = async (passphrase: string) => {
+    const minutes = await this.getUnlockTimeoutMinutes();
+    const expiresAt = minutes === 0 ? 0 : Date.now() + minutes * 60 * 1000;
+
+    this.unlockSession = {
+      walletId: this.selectedID,
+      passphrase,
+      expiresAt,
+    };
+
+    this.scheduleUnlockExpiry(expiresAt);
+  };
+
+  clearUnlockSession = async () => {
+    if (this.unlockTimer) {
+      clearTimeout(this.unlockTimer);
+      this.unlockTimer = null;
+    }
+    this.unlockSession = undefined;
+  };
+
+  restoreUnlockSession = async () => {
+    const session = this.unlockSession;
+
+    if (
+      !session ||
+      session.walletId !== this.selectedID ||
+      !session.passphrase
+    ) {
+      return;
+    }
+
+    if (session.expiresAt && session.expiresAt <= Date.now()) {
+      await this.clearUnlockSession();
+      return;
+    }
+
+    const wallet = await this.wdb.get(this.selectedID);
+
+    try {
+      await wallet.unlock(session.passphrase, ONE_MINUTE);
+      await wallet.lock();
+      this.passphrase = session.passphrase;
+      this.locked = false;
+      this.scheduleUnlockExpiry(session.expiresAt || 0);
+    } catch (e) {
+      await this.clearUnlockSession();
+    }
+  };
+
+  scheduleUnlockExpiry = (expiresAt: number) => {
+    if (this.unlockTimer) {
+      clearTimeout(this.unlockTimer);
+      this.unlockTimer = null;
+    }
+
+    if (!expiresAt) return;
+
+    const delay = Math.max(expiresAt - Date.now(), 0);
+    this.unlockTimer = setTimeout(() => {
+      this.lockWallet().catch(console.error);
+    }, delay);
+  };
+
+  touchUnlockSession = async () => {
+    if (!this.selectedID || this.locked || !this.passphrase) return;
+    await this.persistUnlockSession(this.passphrase);
+  };
+
+  refreshUnlockSession = async () => {
+    if (!this.selectedID || this.locked || !this.passphrase) return;
+    await this.persistUnlockSession(this.passphrase);
   };
 
   getState = async () => {
@@ -202,10 +295,13 @@ class WalletService extends GenericService {
       throw new Error(`Cannot find wallet - ${id}`);
     }
 
+    await put(this.store, SELECTED_WALLET_DB_KEY, id);
+
     if (this.selectedID !== id) {
       const wallet = await this.wdb.get(id);
       await wallet.lock();
       this.emit("locked");
+      await this.clearUnlockSession();
       this.selectedAccount = "default";
       this.transactions = null;
       this.domains = null;
@@ -234,19 +330,33 @@ class WalletService extends GenericService {
   };
 
   getWalletsInfo = async () => {
-    const wallets = (await this.wdb.getWallets()).filter((id: string) => id !== 'primary');
+    const wallets = (await this.wdb.getWallets()).filter(
+      (id: string) => id !== "primary"
+    );
     const walletsInfo = [];
 
     for (const wid of wallets) {
       const info = await this.wdb.get(wid);
       const accounts = await this.getAccountNames(wid);
-      const addresses = await this.genAddresses(0, info.accountDepth, 'receive');
+      const addresses = await this.genAddresses(
+        0,
+        info.accountDepth,
+        "receive"
+      );
       const {
         accountDepth,
         master: {encrypted},
         watchOnly,
       } = info;
-      walletsInfo.push({wid, accountDepth, encrypted, watchOnly, accounts, addresses, locked: this.locked});
+      walletsInfo.push({
+        wid,
+        accountDepth,
+        encrypted,
+        watchOnly,
+        accounts,
+        addresses,
+        locked: this.locked,
+      });
     }
 
     return walletsInfo;
@@ -255,9 +365,9 @@ class WalletService extends GenericService {
   getAccountNames = async (walletID?: string) => {
     const wallet = await this.wdb.get(walletID || this.selectedID);
     if (wallet) {
-    const accounts = await wallet.getAccounts();
+      const accounts = await wallet.getAccounts();
 
-    return accounts;
+      return accounts;
     } else {
       return [];
     }
@@ -266,19 +376,19 @@ class WalletService extends GenericService {
   getAccountsInfo = async (walletID?: string) => {
     const wallet = await this.wdb.get(walletID || "primary");
     if (wallet) {
-    const walletAccounts = await wallet.getAccounts();
-    const accounts = [];
+      const walletAccounts = await wallet.getAccounts();
+      const accounts = [];
 
-    for (const accountName of walletAccounts) {
-      const account = await this.getAccountInfo(accountName);
-      const {accountIndex, name, type, watchOnly, wid} = account;
-      accounts.push({accountIndex, name, type, watchOnly, wid});
+      for (const accountName of walletAccounts) {
+        const account = await this.getAccountInfo(accountName);
+        const {accountIndex, name, type, watchOnly, wid} = account;
+        accounts.push({accountIndex, name, type, watchOnly, wid});
+      }
+
+      return accounts;
+    } else {
+      return [];
     }
-
-    return accounts;
-  } else {
-    return [];
-  }
   };
 
   getAccountInfo = async (accountName?: string, id?: string) => {
@@ -407,7 +517,7 @@ class WalletService extends GenericService {
       }
     }
 
-    return txs.map(tx => tx.getJSON(this.network));
+    return txs.map((tx) => tx.getJSON(this.network));
   };
 
   revealSeed = async (passphrase: string) => {
@@ -510,6 +620,106 @@ class WalletService extends GenericService {
     return wallet.getCoin(Buffer.from(hash, "hex"), index);
   };
 
+  fetchNameOwnerCoin = async (info: any) => {
+    const {owner} = info || {};
+
+    if (!owner?.hash || typeof owner.index !== "number") {
+      return null;
+    }
+
+    const coinJSON = await this.exec("node", "getCoin", owner.hash, owner.index);
+    if (!coinJSON || coinJSON.error) {
+      return null;
+    }
+
+    const coin = new Coin().fromJSON(coinJSON, this.network);
+    coin.hash = Buffer.from(owner.hash, "hex");
+    coin.index = owner.index;
+    return coin;
+  };
+
+  transferCoinTargetsWallet = async (wallet: any, coin: any) => {
+    if (!coin || coin.covenant.type !== types.TRANSFER) {
+      return false;
+    }
+
+    const version = coin.covenant.getU8(2);
+    const hash = coin.covenant.get(3);
+    const address = Address.fromHash(hash, version);
+    return !!(await wallet.getPath(address));
+  };
+
+  getOwnedNameCoin = async (wallet: any, info: any) => {
+    const {owner} = info || {};
+
+    if (!owner?.hash || typeof owner.index !== "number") {
+      return null;
+    }
+
+    const walletCoin = await wallet.getCoin(
+      Buffer.from(owner.hash, "hex"),
+      owner.index
+    );
+
+    if (walletCoin) {
+      return walletCoin;
+    }
+
+    const chainCoin = await this.fetchNameOwnerCoin(info);
+    if (await this.transferCoinTargetsWallet(wallet, chainCoin)) {
+      return chainCoin;
+    }
+
+    return null;
+  };
+
+  getShakedexFinalizeWitness = async (txHash: string) => {
+    const txJSON = await this.exec("node", "getTXByHash", txHash);
+    if (!txJSON || txJSON.error) {
+      throw new Error("Could not load Shakedex transfer transaction.");
+    }
+
+    const tx = TX.fromJSON(txJSON);
+    for (const input of tx.inputs) {
+      const witnessItems = input.witness?.items || [];
+      const rawScript = witnessItems[witnessItems.length - 1];
+
+      if (!rawScript || rawScript.length <= 35) {
+        continue;
+      }
+
+      try {
+        Script.decode(rawScript);
+        const witness = new Witness([rawScript]);
+        witness.compile();
+        return witness;
+      } catch (e) {
+        continue;
+      }
+    }
+
+    throw new Error("Could not find Shakedex finalize witness script.");
+  };
+
+  getRenewalBlockHash = async (height: number) => {
+    const renewalHeight = Math.max(
+      height - this.network.names.renewalMaturity * 2,
+      0
+    );
+    const renewalBlock = await this.exec(
+      "node",
+      "getBlockByHeight",
+      renewalHeight
+    );
+    const hash = renewalBlock?.hash || renewalBlock?.result?.hash;
+
+    if (!hash) {
+      throw new Error(`Could not load renewal block at height ${renewalHeight}.`);
+    }
+
+    return Buffer.from(hash, "hex");
+  };
+
   getDomainName = async (name: string) => {
     const walletId = this.selectedID;
     const wallet = await this.wdb.get(walletId);
@@ -517,11 +727,7 @@ class WalletService extends GenericService {
     const {result} = res || {};
     const {info} = result || {};
 
-    const {owner} = info;
-    const coin = await wallet.getCoin(
-      Buffer.from(owner.hash, "hex"),
-      owner.index
-    );
+    const coin = await this.getOwnedNameCoin(wallet, info);
 
     return {
       ...info,
@@ -578,6 +784,8 @@ class WalletService extends GenericService {
       });
     }
 
+    await this.addTransferDomainsFromHistory(wallet, latestBlock, result);
+
     this.domains = result;
 
     await pushMessage({
@@ -586,6 +794,69 @@ class WalletService extends GenericService {
     });
 
     return this.domains;
+  };
+
+  addTransferDomainsFromHistory = async (
+    wallet: any,
+    latestBlock: any,
+    result: any[]
+  ) => {
+    const seen = new Set(result.map((domain) => domain.name));
+    const txs = await wallet.getHistory("default");
+    const details = await wallet.toDetails(txs);
+
+    for (const detail of details) {
+      const tx = detail.getJSON(this.network, latestBlock?.height);
+
+      for (let index = 0; index < tx.outputs.length; index++) {
+        const output = tx.outputs[index];
+        const covenant = output.covenant;
+
+        if (covenant.action !== "TRANSFER") {
+          continue;
+        }
+
+        const nameHash = covenant.items[0];
+        const nameByHash = await this.exec("node", "getNameByHash", nameHash);
+        const name = nameByHash?.result;
+
+        if (!name || seen.has(name)) {
+          continue;
+        }
+
+        const nameInfo = await this.exec("node", "getNameInfo", name);
+        const info = nameInfo?.result?.info;
+
+        if (
+          !info?.owner ||
+          String(info.owner.hash).toLowerCase() !== String(tx.hash).toLowerCase() ||
+          info.owner.index !== index
+        ) {
+          continue;
+        }
+
+        const coin = await this.getOwnedNameCoin(wallet, info);
+        if (!coin || coin.covenant.type !== types.TRANSFER) {
+          continue;
+        }
+
+        const ns = new NameState().fromJSON(info);
+        result.push({
+          ...ns.format(latestBlock?.height, this.network),
+          owned: true,
+          ownerCovenantType: typesByVal[coin.covenant.type],
+        });
+        seen.add(name);
+      }
+    }
+
+    result.sort((a, b) => {
+      if (a.ownerCovenantType === "TRANSFER" && b.ownerCovenantType !== "TRANSFER") return -1;
+      if (b.ownerCovenantType === "TRANSFER" && a.ownerCovenantType !== "TRANSFER") return 1;
+      if (a.renewal > b.renewal) return 1;
+      if (b.renewal > a.renewal) return -1;
+      return 0;
+    });
   };
 
   getBidsByName = async (name: string) => {
@@ -699,7 +970,7 @@ class WalletService extends GenericService {
     watchOnly: boolean;
   }) => {
     await this.exec("setting", "setAnalytics", options.optIn);
-    
+
     const wallet = await this.wdb.create(options);
     const balance = await wallet.getBalance();
 
@@ -1212,6 +1483,103 @@ class WalletService extends GenericService {
     return createdTx.toJSON();
   };
 
+  createFinalize = async (opts: {name: string; rate?: number}) => {
+    let step = "starting";
+
+    try {
+      const {name, rate} = opts;
+      const walletId = this.selectedID;
+      const wallet = await this.wdb.get(walletId);
+
+      step = "syncing chain height";
+      const latestBlockNow = await this.exec("node", "getLatestBlock");
+      this.wdb.height = latestBlockNow.height;
+
+      step = "loading name state";
+      await this.addNameState(name);
+
+      if (!rules.verifyName(name)) throw new Error("Invalid name.");
+
+      const rawName = Buffer.from(name, "ascii");
+      const nameHash = rules.hashName(rawName);
+      const ns = await wallet.getNameState(nameHash);
+      const height = this.wdb.height + 1;
+      const network = this.network;
+
+      if (!ns) throw new Error("Auction not found.");
+      if (ns.isExpired(height, network)) throw new Error("Name has expired!");
+
+      const state = ns.state(height, network);
+      if (state !== states.CLOSED) throw new Error("Auction is not yet closed.");
+
+      step = "loading transfer coin";
+      const nameInfo = await this.exec("node", "getNameInfo", name);
+      const info = nameInfo?.result?.info;
+      const coin = await this.getOwnedNameCoin(wallet, info);
+
+      if (!coin) throw new Error(`Wallet does not own transfer for: "${name}".`);
+      if (!coin.covenant.isTransfer()) {
+        throw new Error("Name is not being transferred.");
+      }
+      if (!(await this.transferCoinTargetsWallet(wallet, coin))) {
+        throw new Error(`Transfer is not addressed to this wallet: "${name}".`);
+      }
+      if (height < coin.height + network.names.transferLockup) {
+        throw new Error("Transfer is still locked up.");
+      }
+
+      step = "building finalize output";
+      const version = coin.covenant.getU8(2);
+      const addr = coin.covenant.get(3);
+      const address = Address.fromHash(addr, version);
+
+      let flags = 0;
+      if (ns.weak) flags |= 1;
+
+      const output = new Output();
+      output.address = address;
+      output.value = coin.value;
+      output.covenant.type = types.FINALIZE;
+      output.covenant.pushHash(nameHash);
+      output.covenant.pushU32(ns.height);
+      output.covenant.push(rawName);
+      output.covenant.pushU8(flags);
+      output.covenant.pushU32(ns.claimed);
+      output.covenant.pushU32(ns.renewals);
+      output.covenant.pushHash(await this.getRenewalBlockHash(height));
+
+      const mtx = new MTX();
+      mtx.addCoin(coin);
+      mtx.outputs.push(output);
+
+      step = "loading Shakedex finalize witness";
+      const finalizeWitness = await this.getShakedexFinalizeWitness(info.owner.hash);
+      mtx.inputs[0].witness = finalizeWitness;
+      const transferInputClone = mtx.inputs[0].clone();
+
+      step = "funding finalize transaction";
+      await wallet.fill(mtx, {
+        ...(rate ? {rate} : {}),
+        coins: [coin],
+      });
+      mtx.inputs[0].inject(transferInputClone);
+
+      step = "checking finalize witness";
+      mtx.checkInput(0, coin);
+
+      return {
+        ...mtx.toJSON(),
+        shakedexFinalize: {
+          name,
+        },
+      };
+    } catch (e) {
+      console.error(`[Finalize] Failed while ${step}:`, e);
+      const message = e instanceof Error ? e.message : String(e);
+      throw new Error(`Finalize failed while ${step}: ${message}`);
+    }
+  };
+
   createTx = async (txOptions: any) => {
     const walletId = this.selectedID;
     const wallet = await this.wdb.get(walletId);
@@ -1250,7 +1618,7 @@ class WalletService extends GenericService {
     // Split data into 20-byte chunks (40 hex chars each)
     const dataChunks: string[] = [];
     for (let i = 0; i < data.length; i += 40) {
-      const chunk = data.slice(i, i + 40).padEnd(40, '0');
+      const chunk = data.slice(i, i + 40).padEnd(40, "0");
       dataChunks.push(chunk);
     }
 
@@ -1265,7 +1633,7 @@ class WalletService extends GenericService {
     // Outputs 1+: Data chunks encoded as P2WPKH addresses
     for (let i = 0; i < dataChunks.length; i++) {
       const chunk = dataChunks[i];
-      const dataHash = Buffer.from(chunk, 'hex');
+      const dataHash = Buffer.from(chunk, "hex");
 
       // Create P2WPKH address from data (version 0)
       const dataAddress = Address.fromHash(dataHash, 0);
@@ -1273,7 +1641,11 @@ class WalletService extends GenericService {
       // Value ordered by index for extraction
       const outputValue = MIN_UTXO_VALUE + i;
 
-      console.log(`[Rosen Bridge] Data output ${i}: ${outputValue} dollarydoos to ${dataAddress.toString(this.network.type)}`);
+      console.log(
+        `[Rosen Bridge] Data output ${i}: ${outputValue} dollarydoos to ${dataAddress.toString(
+          this.network.type
+        )}`
+      );
 
       mtx.addOutput({
         address: dataAddress,
@@ -1285,7 +1657,7 @@ class WalletService extends GenericService {
     try {
       await wallet.fill(mtx, rate && {rate});
     } catch (e) {
-      console.error('[Rosen Bridge] Fill error:', e);
+      console.error("[Rosen Bridge] Fill error:", e);
       throw new Error(`Failed to fund transaction: ${e.message}`);
     }
 
@@ -1293,7 +1665,7 @@ class WalletService extends GenericService {
       const createdTx = await wallet.finalize(mtx);
       return createdTx.toJSON();
     } catch (e) {
-      console.error('[Rosen Bridge] Finalize error:', e);
+      console.error("[Rosen Bridge] Finalize error:", e);
       throw new Error(`Failed to finalize transaction: ${e.message}`);
     }
   };
@@ -1370,7 +1742,10 @@ class WalletService extends GenericService {
     transferOutput.covenant.push(recipientAddress.hash);
 
     const lockScriptInputClone = mtx.inputs[0].clone();
-    await wallet.fill(mtx, {rate: rate || await this.getShakedexFeeRate()});
+    await wallet.fill(mtx, {
+      rate: rate || (await this.getShakedexFeeRate()),
+      coins: [lockScriptCoin],
+    });
     mtx.inputs[0].inject(lockScriptInputClone);
 
     const outputs = mtx.outputs;
@@ -1382,7 +1757,16 @@ class WalletService extends GenericService {
 
     mtx.checkInput(0, lockScriptCoin, ANYONECANPAY | SINGLEREVERSE);
 
-    return mtx.toJSON();
+    return {
+      ...mtx.toJSON(),
+      shakedexFulfill: {
+        name: proof.name,
+        price: best.price,
+        fee: best.fee || 0,
+        sellerAddress: proof.paymentAddr,
+        expiresAt: proof.expiresAt,
+      },
+    };
   };
 
   getShakedexLockingCoin = async (proof: any, marketOrigin?: string) => {
@@ -1400,10 +1784,7 @@ class WalletService extends GenericService {
     }
 
     if ((!coinJSON || coinJSON.error) && marketOrigin) {
-      coinJSON = await this.fetchLearnHNSListingCoin(
-        marketOrigin,
-        proof.name
-      );
+      coinJSON = await this.fetchLearnHNSListingCoin(marketOrigin, proof.name);
     }
 
     if (!coinJSON || coinJSON.error) {
@@ -1460,7 +1841,7 @@ class WalletService extends GenericService {
 
   getShakedexMaturityError = (data: any[]) => {
     const nextBid = data
-      .filter(bid => typeof bid?.lockTime === "number" && bid.lockTime > 0)
+      .filter((bid) => typeof bid?.lockTime === "number" && bid.lockTime > 0)
       .sort((a, b) => a.lockTime - b.lockTime)[0];
 
     if (!nextBid) {
@@ -1656,11 +2037,15 @@ class WalletService extends GenericService {
         const mtx = MTX.fromJSON(opts.txJSON);
 
         try {
-          const tx = await wallet.sendMTX(mtx, this.passphrase);
+          const tx = opts.txJSON.shakedexFulfill
+            ? await this.sendShakedexFulfillMTX(wallet, mtx)
+            : opts.txJSON.shakedexFinalize
+            ? await this.sendShakedexFinalizeMTX(wallet, mtx)
+            : await wallet.sendMTX(mtx, this.passphrase);
           await this.exec("node", "sendRawTransaction", tx.toHex());
           returnValue = tx.getJSON(this.network);
         } catch (e) {
-          console.error('[Submit TX] Error:', e);
+          console.error("[Submit TX] Error:", e);
           throw e;
         }
       }
@@ -1669,6 +2054,117 @@ class WalletService extends GenericService {
       this.emit("txAccepted", returnValue);
       return returnValue;
     }
+  };
+
+  sendShakedexFulfillMTX = async (wallet: any, mtx: any) => {
+    const lockScriptCoin = mtx.view.getOutput(mtx.inputs[0].prevout);
+    if (!lockScriptCoin) {
+      throw new Error("Could not verify the Shakedex auction input.");
+    }
+
+    const lockScriptInput = mtx.inputs[0].clone();
+
+    await wallet.sign(mtx, this.passphrase);
+    mtx.inputs[0].inject(lockScriptInput);
+
+    try {
+      mtx.checkInput(0, lockScriptCoin, ANYONECANPAY | SINGLEREVERSE);
+    } catch (e) {
+      console.error("[Shakedex Submit] Auction input check failed:", e);
+      throw new Error("The Shakedex proof signature could not be verified.");
+    }
+
+    for (let i = 1; i < mtx.inputs.length; i++) {
+      const {prevout} = mtx.inputs[i];
+      const coin = mtx.view.getOutput(prevout);
+
+      if (!coin) {
+        throw new Error(`Could not load buyer funding input ${i}.`);
+      }
+
+      if (!mtx.isInputSigned(i, coin)) {
+        throw new Error(
+          "Could not sign the buyer funding input. Check that this wallet owns the selected funds and try again."
+        );
+      }
+    }
+
+    const tx = mtx.toTX();
+
+    if (tx.getSigops(mtx.view) > policy.MAX_TX_SIGOPS) {
+      throw new Error("TX exceeds policy sigops.");
+    }
+
+    if (tx.getWeight() > policy.MAX_TX_WEIGHT) {
+      throw new Error("TX exceeds policy weight.");
+    }
+
+    for (const output of tx.outputs) {
+      if (output.isDust()) {
+        throw new Error("Output is dust.");
+      }
+
+      if (output.value > 0) {
+        if (!output.address) {
+          throw new Error("Cannot send to unknown address.");
+        }
+
+        if (output.address.isNull()) {
+          throw new Error("Cannot send to null address.");
+        }
+      }
+    }
+
+    await this.wdb.addTX(tx);
+    await this.wdb.send(tx);
+
+    return tx;
+  };
+
+  sendShakedexFinalizeMTX = async (wallet: any, mtx: any) => {
+    const transferCoin = mtx.view.getOutput(mtx.inputs[0].prevout);
+    if (!transferCoin) {
+      throw new Error("Could not verify the Shakedex finalize input.");
+    }
+
+    const transferInput = mtx.inputs[0].clone();
+
+    await wallet.sign(mtx, this.passphrase);
+    mtx.inputs[0].inject(transferInput);
+
+    try {
+      mtx.checkInput(0, transferCoin);
+    } catch (e) {
+      console.error("[Shakedex Finalize Submit] Transfer input check failed:", e);
+      throw new Error("The Shakedex finalize witness could not be verified.");
+    }
+
+    for (let i = 1; i < mtx.inputs.length; i++) {
+      const {prevout} = mtx.inputs[i];
+      const coin = mtx.view.getOutput(prevout);
+
+      if (!coin) {
+        throw new Error(`Could not load finalize funding input ${i}.`);
+      }
+
+      if (!mtx.isInputSigned(i, coin)) {
+        throw new Error(
+          "Could not sign the finalize funding input. Check that this wallet owns the selected funds and try again."
+        );
+      }
+    }
+
+    const tx = mtx.toTX();
+
+    if (tx.getSigops(mtx.view) > policy.MAX_TX_SIGOPS) {
+      throw new Error("TX exceeds policy sigops.");
+    }
+
+    if (tx.getWeight() > policy.MAX_TX_WEIGHT) {
+      throw new Error("TX exceeds policy weight.");
+    }
+
+    return tx;
   };
 
   async _addOutputPathToTxQueue(
@@ -1787,7 +2283,7 @@ class WalletService extends GenericService {
 
         // TODO figure out why chainwork param fails assertion
         delete entryOption.chainwork;
-        
+
         const entry = new ChainEntry({
           ...entryOption,
           version: Number(entryOption.version),
@@ -1803,13 +2299,13 @@ class WalletService extends GenericService {
           chainwork:
             entryOption.chainwork && BN.from(entryOption.chainwork, 16, "be"),
         });
-        
+
         await this.wdb._addTX(tx, entry);
 
         retries = 0;
       } catch (e) {
         retries++;
-        
+
         await new Promise((r) => setTimeout(r, 10));
 
         if (retries > 10000) {
@@ -2083,6 +2579,14 @@ class WalletService extends GenericService {
     await this.wdb.watch();
     await this.insertTransactions(transactions);
     await put(this.store, `latest_block_${this.selectedID}`, latestBlockEnd);
+    await this.getTransactions();
+    await this.getDomainNames();
+
+    const balance = await this.getWalletBalance(
+      this.selectedID,
+      this.selectedAccount
+    );
+    await pushMessage(setWalletBalance(balance));
 
     this.rescanning = false;
     this.pushState();
@@ -2206,21 +2710,24 @@ class WalletService extends GenericService {
       });
 
       // Update balance in Redux store when new transactions are detected
-      const balance = await this.getWalletBalance(this.selectedID, this.selectedAccount);
+      const balance = await this.getWalletBalance(
+        this.selectedID,
+        this.selectedAccount
+      );
       await pushMessage(setWalletBalance(balance));
     }
   };
 
   async initPoller() {
     // MV3: Use chrome.alarms instead of setInterval for service worker persistence
-    const ALARM_NAME = 'walletPoller';
+    const ALARM_NAME = "walletPoller";
 
     // Clear any existing alarm
     await chrome.alarms.clear(ALARM_NAME);
 
     // Create a new alarm that fires every minute
     await chrome.alarms.create(ALARM_NAME, {
-      periodInMinutes: 1
+      periodInMinutes: 1,
     });
 
     // Run immediately once
@@ -2230,14 +2737,11 @@ class WalletService extends GenericService {
   async runPollerTick() {
     try {
       await this.checkForRescan();
-      const {hash, height, time} = await this.exec(
-        "node",
-        "getLatestBlock"
-      );
+      const {hash, height, time} = await this.exec("node", "getLatestBlock");
       await pushMessage(setInfo(hash, height, time));
       this.emit("newBlock", {hash, height, time});
     } catch (e) {
-      console.error('Poller tick failed:', e);
+      console.error("Poller tick failed:", e);
     }
   }
 
@@ -2381,7 +2885,7 @@ class WalletService extends GenericService {
   };
 
   async _ledgerInputs(wallet: any, tx: any) {
-    // For mtx created in Shake Wallet (instead of hsd), the inputs don't include
+    // For mtx created in LearnHNS Wallet (instead of hsd), the inputs don't include
     // path, so they need to be recreated as LedgerInput
     const ledgerInputs = [];
 
@@ -2434,16 +2938,21 @@ class WalletService extends GenericService {
 
     if (!this.selectedID) {
       const walletIDs = await this.getWalletIDs();
-      this.selectedID = walletIDs.filter((id) => id !== "primary")[0];
+      const usableWalletIDs = walletIDs.filter((id) => id !== "primary");
+      const savedWalletID = await get(this.store, SELECTED_WALLET_DB_KEY);
+      this.selectedID = usableWalletIDs.includes(savedWalletID)
+        ? savedWalletID
+        : usableWalletIDs[0] || "";
     }
 
+    await this.restoreUnlockSession();
     this.checkForRescan();
     await this.initPoller();
   }
 
   async stop() {
     // MV3: Clear the chrome.alarm instead of setInterval
-    await chrome.alarms.clear('walletPoller');
+    await chrome.alarms.clear("walletPoller");
   }
 }
 

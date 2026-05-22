@@ -71,6 +71,16 @@ export type Transaction = {
   tx: string;
   bid?: number;
   blind?: number;
+  shakedexFulfill?: {
+    name: string;
+    price: number;
+    fee: number;
+    sellerAddress?: string;
+    expiresAt?: number;
+  };
+  shakedexFinalize?: {
+    name: string;
+  };
 };
 
 export type TxInput = {

@@ -13,7 +13,7 @@ let nonce = 0;
 
 
 /**
- * Connect to Shake Wallet
+ * Connect to LearnHNS Wallet
  * @returns Wallet client
  */
 async function connect() {
@@ -185,10 +185,28 @@ async function fillShakedexAuction(proof: any, marketOrigin?: string) {
   return fulfillShakedexAuction(proof, marketOrigin);
 }
 
+/**
+ * Finalize a Handshake transfer after the 288-block transfer lockup.
+ * Useful after buying a LearnHNS Market / Shakedex listing.
+ */
+async function finalizeShakedexTransfer(name: string) {
+  await assertunLocked();
+  const tx: any = await post({
+    type: MessageTypes.SEND_SHAKEDEX_FINALIZE,
+    payload: {name},
+  });
+
+  return {
+    name,
+    finalizeTxHash: tx?.hash,
+    tx,
+  };
+}
+
 async function getCapabilities() {
   return {
     shakedexFill: true,
-    shakedexFinalize: false,
+    shakedexFinalize: true,
     shakedexList: false,
   };
 }
@@ -330,6 +348,7 @@ const wallet = {
   sendRosenBridgeData,
   fillShakedexAuction,
   fulfillShakedexAuction,
+  finalizeShakedexTransfer,
   sendOpen,
   sendBid,
   sendReveal,
@@ -435,4 +454,3 @@ export type TXTRecord = {
 }
 
 export type UpdateRecordType = DSRecord | NSRecord | GLUE4Record | GLUE6Record | SYNTH4Record | SYNTH6Record | TXTRecord;
-

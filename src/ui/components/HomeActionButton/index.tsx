@@ -6,6 +6,8 @@ import "./home-action-btn.scss";
 import postMessage from "@src/util/postMessage";
 import MessageTypes from "@src/util/messageTypes";
 import {useDomainByName} from "@src/ui/ducks/domains";
+import {fetchTXQueue} from "@src/ui/ducks/queue";
+import {useDispatch} from "react-redux";
 
 type Props = {
   color: 'blue' | 'orange' | 'green';
@@ -32,7 +34,7 @@ export function HomeActionButton(props: Props): ReactElement {
         'home-action-btn--green': color === 'green',
         'home-action-btn--disabled': disabled,
       })}
-      onClick={onClick}
+      onClick={disabled ? undefined : onClick}
     >
       <Icon fontAwesome={fontAwesome} size={1.25} />
       <small>{text}</small>
@@ -200,13 +202,47 @@ export function TransferButton(): ReactElement {
   )
 }
 
-export function FinalizeButton(): ReactElement {
+export function FinalizeButton(props: { name: string }): ReactElement {
+  const domain = useDomainByName(props.name);
+  const dispatch = useDispatch();
+  const [error, setError] = useState("");
+  const [status, setStatus] = useState("");
+  const sendTx = useCallback(async () => {
+    setError("");
+    setStatus("");
+
+    try {
+      const tx = await postMessage({
+        type: MessageTypes.CREATE_FINALIZE,
+        payload: { name: props.name },
+      });
+
+      if (!tx) {
+        setError("Could not create finalize transaction.");
+        return;
+      }
+
+      await postMessage({
+        type: MessageTypes.ADD_TX_QUEUE,
+        payload: tx,
+      });
+      await dispatch(fetchTXQueue());
+      setStatus("Queued");
+    } catch (e) {
+      setError(e?.message || "Finalize transaction failed.");
+    }
+  }, [dispatch, props.name]);
+
   return (
-    <HomeActionButton
-      color="green"
-      text="Finalize"
-      fontAwesome="fa-receipt"
-      onClick={() => null}
-    />
+    <div className="home-action-btn__group">
+      <HomeActionButton
+        color="green"
+        text={status || "Finalize"}
+        fontAwesome="fa-receipt"
+        onClick={sendTx}
+        disabled={domain?.ownerCovenantType !== 'TRANSFER' || status === "Queued"}
+      />
+      {!!error && <small className="home-action-btn__error">{error}</small>}
+    </div>
   )
 }

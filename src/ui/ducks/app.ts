@@ -11,6 +11,8 @@ export enum ActionType {
   SET_SHAKE_MESSAGE = "app/setShakeMessage",
   SET_MULTI_ACCOUNTS_ENABLED = "app/setMultiAccountsEnabled",
   SET_EXPLORER = "app/setExplorer",
+  SET_SUBMITTED_TX = "app/setSubmittedTx",
+  CLEAR_SUBMITTED_TX = "app/clearSubmittedTx",
 }
 
 type Action = {
@@ -25,6 +27,7 @@ type State = {
   shakeMessage: string;
   multiAccountsEnabled: boolean;
   explorer: Explorer;
+  submittedTx?: SubmittedTx;
 };
 
 const initialState: State = {
@@ -32,6 +35,12 @@ const initialState: State = {
   shakeMessage: "",
   multiAccountsEnabled: false,
   explorer: EXPLORERS[0],
+};
+
+export type SubmittedTx = {
+  hash: string;
+  action?: string;
+  status: "broadcasting" | "submitted";
 };
 
 export const setShakeMoving = (moving: boolean) => {
@@ -52,6 +61,19 @@ export const setExplorer = (explorer: Explorer) => {
   return {
     type: ActionType.SET_EXPLORER,
     payload: explorer,
+  };
+};
+
+export const setSubmittedTx = (tx: SubmittedTx) => {
+  return {
+    type: ActionType.SET_SUBMITTED_TX,
+    payload: tx,
+  };
+};
+
+export const clearSubmittedTx = () => {
+  return {
+    type: ActionType.CLEAR_SUBMITTED_TX,
   };
 };
 
@@ -93,6 +115,16 @@ export default function app(state = initialState, action: Action): State {
         ...state,
         explorer: action.payload,
       };
+    case ActionType.SET_SUBMITTED_TX:
+      return {
+        ...state,
+        submittedTx: action.payload,
+      };
+    case ActionType.CLEAR_SUBMITTED_TX:
+      return {
+        ...state,
+        submittedTx: undefined,
+      };
     default:
       return state;
   }
@@ -119,5 +151,11 @@ export const useMultiAccountsEnabled = () => {
 export const useExplorer = () => {
   return useSelector((state: AppRootState) => {
     return state.app.explorer;
+  }, deepEqual);
+};
+
+export const useSubmittedTx = () => {
+  return useSelector((state: AppRootState) => {
+    return state.app.submittedTx;
   }, deepEqual);
 };
