@@ -84,3 +84,35 @@
     margin: 0.5rem 0 1.5rem;
   }
 }
+
+.restore-notice {
+  border: 1px solid rgba(variables.$primary-blue, 0.22);
+  border-radius: 8px;
+  background: rgba(variables.$primary-blue, 0.08);
+  color: variables.$primary-text;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin: -0.5rem 0 1rem;
+  padding: 0.75rem;
+
+  strong {
+    @extend %regular-font;
+  }
+
+  small {
+    color: variables.$secondary-text;
+    line-height: 1.35;
+  }
+
+  button {
+    @extend %regular-font;
+    align-self: flex-start;
+    background: transparent;
+    border: none;
+    color: variables.$primary-blue;
+    cursor: pointer;
+    font-weight: 600;
+    padding: 0;
+  }
+}

@@ -1,0 +1,205 @@
+@use "../../../../src/util/variables";
+
+.marketplace {
+  @extend %col-nowrap;
+
+  .loader {
+    margin: 1rem auto;
+  }
+
+  &__toolbar {
+    @extend %row-nowrap;
+    align-items: flex-start;
+    border-bottom: 1px solid variables.$border-gray;
+    gap: 0.75rem;
+    justify-content: space-between;
+    padding: 0.75rem 1.25rem;
+
+    &__meta {
+      @extend %small-font;
+      color: variables.$secondary-text;
+      font-weight: 600;
+    }
+
+    &__actions {
+      @extend %row-nowrap;
+      align-items: center;
+      flex: 0 0 auto;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      justify-content: flex-end;
+    }
+  }
+
+  &__filter {
+    select {
+      @extend %small-font;
+      background-color: variables.$white;
+      border-color: variables.$border-gray;
+      min-width: 5.75rem;
+      padding: 0.35rem 0.5rem;
+    }
+  }
+
+  &__notice {
+    @extend %small-font;
+    border-bottom: 1px solid variables.$border-gray;
+    padding: 0.75rem 1.25rem;
+
+    &--error {
+      color: variables.$error-red;
+    }
+
+    &--success {
+      color: variables.$success-green;
+    }
+  }
+
+  &__empty {
+    @extend %col-nowrap;
+    @extend %regular-font;
+    align-items: center;
+    color: variables.$border-gray;
+    font-weight: 700;
+    margin: 1rem auto;
+    text-align: center;
+
+    small {
+      color: variables.$secondary-text;
+      font-weight: 400;
+      margin-top: 0.25rem;
+      max-width: 18rem;
+    }
+  }
+}
+
+.marketplace-listing {
+  @extend %row-nowrap;
+  align-items: center;
+  cursor: pointer;
+  padding: 1rem 1.25rem;
+  transition: background-color 150ms ease-in-out;
+
+  + .marketplace-listing {
+    border-top: 1px solid variables.$border-gray;
+  }
+
+  &:hover {
+    background-color: variables.$lightgray;
+  }
+
+  &:active {
+    background-color: rgba(variables.$black, 0.075);
+  }
+
+  &__icon {
+    @extend %row-nowrap;
+    align-items: center;
+    border: 1px solid variables.$black;
+    border-radius: 50%;
+    flex: 0 0 auto;
+    height: 2rem;
+    justify-content: center;
+    width: 2rem;
+  }
+
+  &__body {
+    @extend %col-nowrap;
+    flex: 1 1 auto;
+    min-width: 0;
+    padding-left: 1rem;
+
+    &__name {
+      @extend %row-nowrap;
+      @extend %lite-font;
+      align-items: center;
+      gap: 0.4rem;
+      font-weight: 600;
+      min-width: 0;
+
+      span:first-child {
+        @extend %ellipsis;
+      }
+
+      &__unicode {
+        flex: 0 0 auto;
+      }
+    }
+
+    &__status {
+      @extend %row-nowrap;
+      align-items: center;
+      gap: 0.5rem;
+      margin-top: 0.25rem;
+
+      &__pill {
+        @extend %small-font;
+        border: 1px solid variables.$border-gray;
+        border-radius: 0.5rem;
+        color: variables.$secondary-text;
+        font-weight: 600;
+        line-height: 1;
+        padding: 0.25rem 0.4rem;
+
+        &--active {
+          border-color: variables.$success-green;
+          color: variables.$success-green;
+        }
+
+        &--pending,
+        &--waiting {
+          border-color: variables.$warning-orange;
+          color: variables.$warning-orange;
+        }
+
+        &--expired,
+        &--unavailable {
+          border-color: variables.$error-red;
+          color: variables.$error-red;
+        }
+      }
+
+      &__link {
+        @extend %clickable;
+        @extend %small-font;
+        background: transparent;
+        border: 0;
+        color: variables.$primary-blue;
+        font-weight: 600;
+        padding: 0;
+      }
+    }
+  }
+
+  &__trade {
+    @extend %col-nowrap;
+    align-items: flex-end;
+    flex: 0 0 auto;
+    margin-left: 0.75rem;
+
+    &__price {
+      @extend %regular-font;
+      font-weight: 600;
+      margin-bottom: 0.35rem;
+      white-space: nowrap;
+    }
+
+    &__buy {
+      min-width: 4.5rem;
+
+      &:disabled {
+        cursor: default;
+        opacity: 0.45;
+      }
+    }
+
+    &__pending {
+      @extend %small-font;
+      color: variables.$secondary-text;
+      font-weight: 600;
+      min-height: 1.75rem;
+      padding-top: 0.25rem;
+      white-space: nowrap;
+    }
+  }
+}

@@ -19,13 +19,18 @@ import postMessage from "@src/util/postMessage";
 import MessageTypes from "@src/util/messageTypes";
 import Button, {ButtonProps, ButtonType} from "@src/ui/components/Button";
 import {selectAccount, useWalletState} from "@src/ui/ducks/wallet";
-import {setMultiAccountsEnabled, useMultiAccountsEnabled} from "@src/ui/ducks/app";
+import {
+  setMultiAccountsEnabled,
+  useMultiAccountsEnabled,
+} from "@src/ui/ducks/app";
 import Modal from "@src/ui/components/Modal";
 import Textarea from "@src/ui/components/Textarea";
 import SwitchButton from "@src/ui/components/SwitchButton";
 import Select from "@src/ui/components/Select";
 import {EXPLORERS} from "@src/util/explorer";
 import {useExplorer, setExplorer} from "@src/ui/ducks/app";
+import {DEFAULT_SHAKEDEX_CHANNEL} from "@src/util/marketplace";
+import TermsOfUse from "@src/ui/pages/Onboarding/terms";
 
 const pkg = require("../../../../package.json");
 
@@ -67,6 +72,16 @@ export default function Settings(): ReactElement {
             <div className="settings__title">Network</div>
           </RegularViewHeader>
         </Route>
+        <Route path="/settings/marketplace">
+          <RegularViewHeader onClose={() => history.push("/")}>
+            <Icon
+              size={1.25}
+              fontAwesome="fa-arrow-left"
+              onClick={() => history.goBack()}
+            />
+            <div className="settings__title">Marketplace</div>
+          </RegularViewHeader>
+        </Route>
         <Route path="/settings/wallet">
           <RegularViewHeader onClose={() => history.push("/")}>
             <Icon
@@ -85,6 +100,16 @@ export default function Settings(): ReactElement {
               onClick={() => history.goBack()}
             />
             <div className="settings__title">Security</div>
+          </RegularViewHeader>
+        </Route>
+        <Route path="/settings/about/terms">
+          <RegularViewHeader onClose={() => history.push("/")}>
+            <Icon
+              size={1.25}
+              fontAwesome="fa-arrow-left"
+              onClick={() => history.push("/settings/about")}
+            />
+            <div className="settings__title">Terms</div>
           </RegularViewHeader>
         </Route>
         <Route path="/settings/about">
@@ -111,14 +136,20 @@ export default function Settings(): ReactElement {
           <Route path="/settings/network">
             <NetworkContent />
           </Route>
+          <Route path="/settings/marketplace">
+            <MarketplaceContent />
+          </Route>
           <Route path="/settings/wallet">
             <WalletContent />
           </Route>
           <Route path="/settings/security">
             <SecurityContent />
           </Route>
+          <Route path="/settings/about/terms">
+            <TermsContent />
+          </Route>
           <Route path="/settings/about">
-            <SettingGroup name="Version">{pkg.version}</SettingGroup>
+            <AboutContent />
           </Route>
           <Route path="/settings">
             <SettingsSelectContent />
@@ -145,16 +176,19 @@ function GeneralContent(): ReactElement {
     });
   }
 
-  const onExplorerChange = useCallback(async (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const newId = e.target.value;
-    if (newId === "custom") return;
-    const newExplorer = EXPLORERS.find((e) => e.id === newId) || EXPLORERS[0];
-    await postMessage({
-      type: MessageTypes.SET_EXPLORER,
-      payload: newExplorer,
-    });
-    dispatch(setExplorer(newExplorer));
-  }, [dispatch]);
+  const onExplorerChange = useCallback(
+    async (e: React.ChangeEvent<HTMLSelectElement>) => {
+      const newId = e.target.value;
+      if (newId === "custom") return;
+      const newExplorer = EXPLORERS.find((e) => e.id === newId) || EXPLORERS[0];
+      await postMessage({
+        type: MessageTypes.SET_EXPLORER,
+        payload: newExplorer,
+      });
+      dispatch(setExplorer(newExplorer));
+    },
+    [dispatch]
+  );
 
   const updateMultiAccountsEnabled = useCallback(
     async (e) => {
@@ -183,7 +217,10 @@ function GeneralContent(): ReactElement {
           options: explorerOptions,
         }}
       >
-        <small>Select the block explorer to open names, transactions, addresses, and blocks.</small>
+        <small>
+          Select the block explorer to open names, transactions, addresses, and
+          blocks.
+        </small>
       </SettingGroup>
       <SettingGroup
         name="Enable Multi-Accounts"
@@ -192,7 +229,11 @@ function GeneralContent(): ReactElement {
           active: multiAccountsEnabled,
         }}
       >
-        <small><b>Warning: </b>Any transactions made from non-default accounts will not be visible in Bob Desktop as it does not support multi-accounts yet.</small>
+        <small>
+          <b>Warning: </b>Any transactions made from non-default accounts will
+          not be visible in Bob Desktop as it does not support multi-accounts
+          yet.
+        </small>
       </SettingGroup>
     </>
   );
@@ -219,7 +260,6 @@ function NetworkContent(): ReactElement {
       setDefaultAPIKey(apiKey);
     })();
   }, []);
-
 
   const onSaveURL = useCallback(async () => {
     setSavingUrl(true);
@@ -285,6 +325,74 @@ function NetworkContent(): ReactElement {
   );
 }
 
+function MarketplaceContent(): ReactElement {
+  const [channel, setChannel] = useState(DEFAULT_SHAKEDEX_CHANNEL);
+  const [savedChannel, setSavedChannel] = useState(DEFAULT_SHAKEDEX_CHANNEL);
+  const [channelError, setChannelError] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    (async function onMarketplaceContentMount() {
+      const currentChannel = await postMessage({
+        type: MessageTypes.GET_SHAKEDEX_CHANNEL,
+      });
+      setChannel(currentChannel as string);
+      setSavedChannel(currentChannel as string);
+    })();
+  }, []);
+
+  const onSaveChannel = useCallback(async () => {
+    setSaving(true);
+    setChannelError("");
+    try {
+      const saved = await postMessage({
+        type: MessageTypes.SET_SHAKEDEX_CHANNEL,
+        payload: channel,
+      });
+      setChannel(saved as string);
+      setSavedChannel(saved as string);
+    } catch (e: any) {
+      setChannelError(e.message || "Could not save marketplace channel.");
+    }
+    setSaving(false);
+  }, [channel]);
+
+  const onResetChannel = useCallback(() => {
+    setChannel(DEFAULT_SHAKEDEX_CHANNEL);
+    setChannelError("");
+  }, []);
+
+  return (
+    <>
+      <SettingGroup
+        name="Shakedex Channel"
+        primaryBtnProps={{
+          children: "Save",
+          onClick: onSaveChannel,
+          disabled: savedChannel === channel || saving,
+          loading: saving,
+        }}
+        secondaryBtnProps={{
+          children: "Reset",
+          onClick: onResetChannel,
+          disabled: channel === DEFAULT_SHAKEDEX_CHANNEL || saving,
+        }}
+      >
+        <Input
+          value={channel}
+          errorMessage={channelError}
+          onChange={(e) => setChannel(e.target.value)}
+          placeholder={DEFAULT_SHAKEDEX_CHANNEL}
+        />
+        <small>
+          Choose the LearnHNS-compatible marketplace used for browsing listings,
+          proof downloads, and Shakedex coin lookup.
+        </small>
+      </SettingGroup>
+    </>
+  );
+}
+
 function WalletContent(): ReactElement {
   const {rescanning} = useWalletState();
 
@@ -326,13 +434,20 @@ function SecurityContent(): ReactElement {
   const [revealError, setRevealError] = useState("");
   const [mnemonic, setMnemonic] = useState("");
   const [optInAnalytics, setOptInAnalytics] = useState(false);
+  const [lockTimeout, setLockTimeout] = useState("15");
 
   useEffect(() => {
     (async function () {
-      const optIn = await postMessage({
-        type: MessageTypes.GET_ANALYTICS,
-      });
+      const [optIn, timeout] = await Promise.all([
+        postMessage({
+          type: MessageTypes.GET_ANALYTICS,
+        }),
+        postMessage({
+          type: MessageTypes.GET_SECURITY_LOCK_TIMEOUT,
+        }),
+      ]);
       setOptInAnalytics(optIn);
+      setLockTimeout(String(timeout ?? 15));
     })();
   }, []);
 
@@ -368,6 +483,15 @@ function SecurityContent(): ReactElement {
     setPassword("");
     setRevealError("");
     setShowingRevealModal(false);
+  }, []);
+
+  const updateLockTimeout = useCallback(async (e) => {
+    const value = e.target.value;
+    const timeout = await postMessage({
+      type: MessageTypes.SET_SECURITY_LOCK_TIMEOUT,
+      payload: Number(value),
+    });
+    setLockTimeout(String(timeout));
   }, []);
 
   return (
@@ -420,6 +544,26 @@ function SecurityContent(): ReactElement {
         </Modal>
       )}
       <SettingGroup
+        name="Auto-Lock Timer"
+        selectProps={{
+          value: lockTimeout,
+          onChange: updateLockTimeout,
+          options: [
+            {value: "1", children: "1 minute"},
+            {value: "15", children: "15 minutes"},
+            {value: "60", children: "1 hour"},
+            {value: "240", children: "4 hours"},
+            {value: "0", children: "Never during browser session"},
+          ],
+        }}
+      >
+        <small>
+          Keep the wallet unlocked while you are active, then lock it after this
+          period. The unlocked session is kept in memory and may reset when the
+          extension background service restarts.
+        </small>
+      </SettingGroup>
+      <SettingGroup
         name="Reveal Seedphrase"
         primaryBtnProps={{
           children: "Reveal",
@@ -435,9 +579,66 @@ function SecurityContent(): ReactElement {
           active: optInAnalytics,
         }}
       >
-        <small>Send analytics to Aco to help improve Shake Wallet.</small>
+        <small>Send analytics to help improve LearnHNS Wallet.</small>
       </SettingGroup> */}
     </>
+  );
+}
+
+function AboutContent(): ReactElement {
+  const history = useHistory();
+  const openLearnHNS = useCallback(() => {
+    window.open("https://learnhns.com/", "_blank");
+  }, []);
+
+  return (
+    <>
+      <SettingGroup name="LearnHNS Wallet">
+        <small>
+          A Chrome extension wallet for Handshake names, HNS, DNS records, and
+          LearnHNS Market confirmations.
+        </small>
+      </SettingGroup>
+      <SettingGroup name="Version">
+        <strong>{pkg.version}</strong>
+      </SettingGroup>
+      <SettingGroup
+        name="Terms of Use"
+        primaryBtnProps={{
+          children: "View",
+          onClick: () => history.push("/settings/about/terms"),
+        }}
+      >
+        <small>
+          Review LearnHNS Wallet terms, including wallet rescan and address
+          lookup disclosures.
+        </small>
+      </SettingGroup>
+      <SettingGroup
+        name="Website"
+        primaryBtnProps={{
+          children: "Open",
+          onClick: openLearnHNS,
+        }}
+      >
+        <a
+          className="settings__link"
+          href="https://learnhns.com/"
+          target="_blank"
+          rel="noreferrer"
+        >
+          learnhns.com
+        </a>
+      </SettingGroup>
+    </>
+  );
+}
+
+function TermsContent(): ReactElement {
+  return (
+    <div className="settings__terms">
+      <TermsOfUse />
+    </div>
   );
 }
 
@@ -455,6 +656,11 @@ function SettingsSelectContent(): ReactElement {
         name="Network"
         description="Edit RPC network"
         onClick={() => history.push("/settings/network")}
+      />
+      <SettingSelectGroup
+        name="Marketplace"
+        description="Choose Shakedex marketplace channel"
+        onClick={() => history.push("/settings/marketplace")}
       />
       <SettingSelectGroup
         name="Wallet"

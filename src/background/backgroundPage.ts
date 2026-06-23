@@ -11,19 +11,22 @@ import AnalyticsService from "@src/background/services/analytics";
   let app: AppService;
 
   // MV3: Use native Chrome API instead of webextension-polyfill
-  chrome.runtime.onMessage.addListener((request: any, sender: any, sendResponse: any) => {
-    (async () => {
-      await waitForStartApp();
+  chrome.runtime.onMessage.addListener(
+    (request: any, sender: any, sendResponse: any) => {
+      (async () => {
+        await waitForStartApp();
 
-      try {
-        const res = await handleMessage(app, request, sender);
-        sendResponse([null, res]);
-      } catch (e: any) {
-        sendResponse([e.message, null]);
-      }
-    })();
-    return true; // Required for async sendResponse
-  });
+        try {
+          const res = await handleMessage(app, request, sender);
+          await app.exec("wallet", "touchUnlockSession");
+          sendResponse([null, res]);
+        } catch (e: any) {
+          sendResponse([e.message, null]);
+        }
+      })();
+      return true; // Required for async sendResponse
+    }
+  );
 
   const startedApp = new AppService();
   startedApp.add("setting", new SettingService());
@@ -36,9 +39,15 @@ import AnalyticsService from "@src/background/services/analytics";
   app.on("wallet.locked", async () => {
     const tabs = await chrome.tabs.query({active: true});
     for (let tab of tabs) {
-      await chrome.tabs.sendMessage(tab.id as number, {
-        type: MessageTypes.DISCONNECTED,
-      });
+      try {
+        await chrome.tabs.sendMessage(tab.id as number, {
+          type: MessageTypes.DISCONNECTED,
+        });
+      } catch (e: any) {
+        if (!isMissingReceiverError(e?.message)) {
+          console.error(e);
+        }
+      }
     }
   });
 
@@ -46,14 +55,14 @@ import AnalyticsService from "@src/background/services/analytics";
   chrome.alarms.onAlarm.addListener(async (alarm) => {
     await waitForStartApp();
 
-    if (alarm.name === 'walletPoller') {
-      await app.exec('wallet', 'runPollerTick');
+    if (alarm.name === "walletPoller") {
+      await app.exec("wallet", "runPollerTick");
     }
   });
 
   // MV3: Service worker lifecycle - restore state on startup
   chrome.runtime.onStartup.addListener(async () => {
-    console.log('Service worker starting up...');
+    console.log("Service worker starting up...");
     // App initialization happens in the main IIFE above
   });
 
@@ -72,10 +81,21 @@ import AnalyticsService from "@src/background/services/analytics";
   }
 })();
 
-function handleMessage(app: AppService, message: MessageAction, sender: MessageSender) {
+function handleMessage(
+  app: AppService,
+  message: MessageAction,
+  sender: MessageSender
+) {
   const controller = controllers[message.type];
 
   if (controller) {
     return controller(app, message, sender);
   }
+}
+
+function isMissingReceiverError(message?: string) {
+  return (
+    message === "Could not establish connection. Receiving end does not exist." ||
+    message === "The message port closed before a response was received."
+  );
 }

@@ -1,11 +1,11 @@
 {
     "manifest_version": 3,
-    "name": "Shake Wallet",
-    "description": "Chrome Extension for Handshake",
-    "version": "0.1.2",
+    "name": "LearnHNS Wallet",
+    "description": "A browser wallet for Handshake names, HNS, DNS records, and dapp confirmations.",
+    "version": "0.2.1",
     "action": {
         "default_icon": "icon-16.png",
-        "default_title": "Shake Wallet",
+        "default_title": "LearnHNS Wallet",
         "default_popup": "popup.html"
     },
     "background": {
@@ -15,8 +15,9 @@
     "content_scripts": [
         {
             "matches": [
-                "http://*/*",
-                "https://*/*"
+                "https://market.learnhns.com/*",
+                "http://localhost/*",
+                "http://127.0.0.1/*"
             ],
             "js": [
                 "js/content.js"
@@ -34,13 +35,8 @@
         "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
     },
     "permissions": [
-        "storage",
         "unlimitedStorage",
         "alarms"
-    ],
-    "host_permissions": [
-        "http://*/*",
-        "https://*/*"
     ],
     "web_accessible_resources": [
         {
@@ -48,8 +44,9 @@
                 "js/shake.js"
             ],
             "matches": [
-                "http://*/*",
-                "https://*/*"
+                "https://market.learnhns.com/*",
+                "http://localhost/*",
+                "http://127.0.0.1/*"
             ]
         }
     ]

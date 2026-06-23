@@ -25,6 +25,63 @@
     }
   }
 
+  &__wallets {
+    @extend %col-nowrap;
+    gap: 0.5rem;
+    margin-top: 1.5rem;
+    width: 100%;
+
+    &__item {
+      @extend %row-nowrap;
+      @extend %clickable;
+      align-items: center;
+      background-color: rgba(variables.$white, 0.04);
+      border: 1px solid variables.$border-gray;
+      border-radius: 0.5rem;
+      color: variables.$white;
+      font-family: inherit;
+      font-size: 0.875rem;
+      justify-content: space-between;
+      min-height: 2.5rem;
+      padding: 0.5rem 0.75rem;
+      text-align: left;
+      transition: background-color 150ms ease-in-out, border-color 150ms ease-in-out;
+      width: 100%;
+
+      &:hover,
+      &:focus {
+        background-color: rgba(variables.$white, 0.08);
+        outline: none;
+      }
+
+      &:disabled {
+        cursor: default;
+        opacity: 0.7;
+      }
+
+      &--selected {
+        background-color: rgba(variables.$primary-blue, 0.18);
+        border-color: variables.$primary-blue;
+      }
+
+      &__name {
+        @extend %ellipsis;
+        font-weight: 600;
+        min-width: 0;
+      }
+
+      &__pill {
+        background-color: rgba(variables.$white, 0.1);
+        border-radius: 0.25rem;
+        color: rgba(variables.$white, 0.8);
+        flex: 0 0 auto;
+        font-size: 0.6875rem;
+        margin-left: 0.5rem;
+        padding: 0.15rem 0.5rem;
+      }
+    }
+  }
+
   &__footer {
     @extend %col-nowrap;
     width: 100%;

@@ -63,11 +63,36 @@
 
     &__header {
       @extend %row-nowrap;
+      align-items: center;
+      justify-content: space-between;
       margin-bottom: .25rem;
 
       &__label {
         font-weight: 600;
       }
+
+      &__actions {
+        @extend %row-nowrap;
+        gap: .5rem;
+      }
+    }
+
+    &__message {
+      @extend %small-font;
+      color: variables.$secondary-text;
+      margin: .25rem 1rem;
+
+      &--error {
+        color: variables.$error-red;
+      }
+    }
+
+    &__footer {
+      @extend %row-nowrap;
+      align-items: center;
+      justify-content: flex-end;
+      gap: .5rem;
+      margin: .75rem 1rem 0;
     }
   }
 
@@ -79,6 +104,13 @@
     border-radius: 2px;
     margin: .25rem auto;
     width: calc(100% - 2rem);
+
+    &__header {
+      @extend %row-nowrap;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: .75rem;
+    }
 
     &__empty {
       text-align: center;
@@ -94,9 +126,21 @@
       margin-bottom: .25rem;
     }
 
+    &__type-select {
+      width: 8rem;
+      flex: 0 0 auto;
+    }
+
     &__kvs {
       @extend %row-nowrap;
       overflow-x: auto;
+    }
+
+    &__fields {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
+      gap: .75rem;
+      margin-top: .5rem;
     }
 
     &__kv {

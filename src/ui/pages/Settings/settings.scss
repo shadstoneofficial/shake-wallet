@@ -17,6 +17,21 @@
   .regular-view__content {
     padding: 0;
   }
+
+  &__link {
+    @extend %regular-font;
+    color: variables.$primary-blue;
+    font-weight: 600;
+    text-decoration: none;
+  }
+
+  &__terms {
+    padding: variables.$gutter;
+
+    .terms__contentbox {
+      max-height: none;
+    }
+  }
 }
 
 .setting-group {
@@ -44,23 +59,45 @@
   }
 
   &__row {
-    @extend %row-nowrap;
-    justify-content: space-between;
+    @extend %col-nowrap;
+    align-items: stretch;
+    width: 100%;
   }
 
   &__children {
-    @extend %row-nowrap;
-    margin-right: 0.5rem;
+    @extend %col-nowrap;
+    gap: 0.5rem;
     width: 100%;
+
+    small {
+      display: block;
+      max-width: 100%;
+    }
   }
 
   &__actions {
     @extend %row-nowrap;
+    flex-wrap: wrap;
+    gap: 0.5rem;
     justify-content: flex-end;
+    margin-top: 0.75rem;
+    width: 100%;
+
+    .select-group {
+      width: 100%;
+    }
+
+    select {
+      max-width: 100%;
+      width: 100%;
+    }
 
     .button {
       height: auto;
+      min-height: 2.25rem;
+      min-width: 5.5rem;
       padding: 0.25rem 0.75rem;
+      justify-content: center;
 
       .loader {
         height: 1.1875rem !important;
