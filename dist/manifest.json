@@ -2,7 +2,7 @@
     "manifest_version": 3,
     "name": "LearnHNS Wallet",
     "description": "A browser wallet for Handshake names, HNS, DNS records, and dapp confirmations.",
-    "version": "0.2.1",
+    "version": "0.2.2",
     "action": {
         "default_icon": "icon-16.png",
         "default_title": "LearnHNS Wallet",
@@ -37,6 +37,13 @@
     "permissions": [
         "unlimitedStorage",
         "alarms"
+    ],
+    "host_permissions": [
+        "https://spv.learnhns.com/*"
+    ],
+    "optional_host_permissions": [
+        "https://*/*",
+        "http://*/*"
     ],
     "web_accessible_resources": [
         {

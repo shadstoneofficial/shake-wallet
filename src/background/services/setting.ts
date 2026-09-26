@@ -16,8 +16,9 @@ const EXPLORER_KEY = "explorer_key";
 const SHAKEDEX_CHANNEL_KEY = "shakedex_channel_key";
 const SECURITY_LOCK_TIMEOUT_KEY = "security_lock_timeout_key";
 
+const LEGACY_DEFAULT_HOST = "https://api.handshakeapi.com/hsd";
 const DEFAULT_HOST =
-  process.env.DEFAULT_HOST || "https://api.handshakeapi.com/hsd";
+  process.env.DEFAULT_HOST || "https://spv.learnhns.com/hsd";
 const DEFAULT_API_KEY = process.env.DEFAULT_API_KEY || "";
 const DEFAULT_SECURITY_LOCK_TIMEOUT = 15;
 
@@ -36,8 +37,15 @@ class SettingService extends GenericService {
   }
 
   getAPI = async () => {
-    const apiHost = this.apiHost || (await get(this.store, RPC_HOST_DB_KEY));
+    let apiHost = this.apiHost || (await get(this.store, RPC_HOST_DB_KEY));
     const apiKey = this.apiKey || (await get(this.store, RPC_API_KEY_DB_KEY));
+
+    // Move installs that explicitly persisted the retired default to the new
+    // LearnHNS gateway. Any other user-selected RPC host remains untouched.
+    if (apiHost === LEGACY_DEFAULT_HOST) {
+      apiHost = DEFAULT_HOST;
+      await put(this.store, RPC_HOST_DB_KEY, apiHost);
+    }
 
     return {
       apiHost: apiHost || DEFAULT_HOST,

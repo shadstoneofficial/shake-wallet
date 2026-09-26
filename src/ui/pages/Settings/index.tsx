@@ -263,12 +263,35 @@ function NetworkContent(): ReactElement {
 
   const onSaveURL = useCallback(async () => {
     setSavingUrl(true);
+    setRPCUrlError("");
     try {
+      const normalizedRpcUrl = rpcUrl.trim().replace(/\/+$/, "");
+      const parsedRpcUrl = new URL(normalizedRpcUrl);
+      if (parsedRpcUrl.protocol !== "https:" && parsedRpcUrl.protocol !== "http:") {
+        throw new Error("RPC URL must use HTTPS or HTTP.");
+      }
+
+      const origin = `${parsedRpcUrl.protocol}//${parsedRpcUrl.host}/*`;
+      const granted = await new Promise<boolean>((resolve, reject) => {
+        chrome.permissions.request({origins: [origin]}, (allowed) => {
+          const lastError = chrome.runtime.lastError;
+          if (lastError) {
+            reject(new Error(lastError.message));
+            return;
+          }
+          resolve(allowed);
+        });
+      });
+      if (!granted) {
+        throw new Error("Host access is required to use this RPC URL.");
+      }
+
       await postMessage({
         type: MessageTypes.SET_RPC_HOST,
-        payload: rpcUrl,
+        payload: normalizedRpcUrl,
       });
-      setDefaultRPCUrl(rpcUrl);
+      setRPCUrl(normalizedRpcUrl);
+      setDefaultRPCUrl(normalizedRpcUrl);
     } catch (e: any) {
       setRPCUrlError(e.message);
     }
