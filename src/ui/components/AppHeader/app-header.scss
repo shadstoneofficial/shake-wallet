@@ -104,5 +104,32 @@
     flex: 1;
     align-items: center;
     justify-content: flex-end;
+    gap: 0.625rem;
+  }
+
+  &__settings-button {
+    @extend %flex;
+    @extend %clickable;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 50%;
+    color: variables.$secondary-text;
+    height: 2.25rem;
+    padding: 0;
+    width: 2.25rem;
+    transition: background-color 150ms ease-in-out, color 150ms ease-in-out;
+
+    &:hover,
+    &:focus {
+      background-color: rgba(variables.$black, 0.05);
+      color: variables.$primary-text;
+      outline: none;
+    }
+
+    &:active {
+      background-color: rgba(variables.$black, 0.1);
+    }
   }
 }

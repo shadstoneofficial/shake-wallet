@@ -7,10 +7,13 @@ import React, {
 } from "react";
 import {
   fetchWalletBalance,
+  fullRescan,
+  stopRescan,
   useWalletBalance,
   useCurrentWallet,
   useCurrentAccount,
   useReceiveAddress,
+  useWalletState,
 } from "@src/ui/ducks/wallet";
 import {useDispatch} from "react-redux";
 import {formatNumber, fromDollaryDoos} from "@src/util/number";
@@ -38,12 +41,14 @@ import {
   setOffset as setDomainOffset,
 } from "@src/ui/ducks/domains";
 import Domains from "@src/ui/components/Domains";
+import Marketplace from "@src/ui/components/Marketplace";
 import {fetchTXQueue} from "@src/ui/ducks/queue";
 import {useLocation} from "react-router";
 import queryString from "querystring";
 import HandshakeSymbol from "@src/ui/components/HandshakeSymbol";
 import AccountMenu from "@src/ui/components/AccountMenu";
 import ReactTooltip from "react-tooltip";
+import Button, {ButtonType} from "@src/ui/components/Button";
 
 export default function Home(): ReactElement {
   const dispatch = useDispatch();
@@ -52,10 +57,11 @@ export default function Home(): ReactElement {
   const currentWallet = useCurrentWallet();
   const currentAddress = useReceiveAddress();
   const currentAccount = useCurrentAccount();
+  const {rescanning} = useWalletState();
   const loc = useLocation();
   const {spendable, lockedUnconfirmed} = useWalletBalance();
   const parsed = queryString.parse(loc.search.slice(1));
-  const [tab, setTab] = useState<"domains" | "activity">(
+  const [tab, setTab] = useState<"domains" | "activity" | "marketplace">(
     (parsed.defaultTab as any) || "activity"
   );
   const listElement = useRef<HTMLDivElement>(null);
@@ -101,13 +107,22 @@ export default function Home(): ReactElement {
       if ((scrollTop + offsetHeight) / scrollHeight > 0.8) {
         if (tab === "activity") {
           dispatch(setTXOffset(txOffset + 20));
-        } else {
+        } else if (tab === "domains") {
           dispatch(setDomainOffset(domainOffset + 20));
         }
       }
     },
     [listElement, pageElement, tab, txOffset, domainOffset]
   );
+
+  const onRescanClick = useCallback(() => {
+    if (rescanning) {
+      dispatch(stopRescan());
+      return;
+    }
+
+    dispatch(fullRescan());
+  }, [dispatch, rescanning]);
 
   return (
     <>
@@ -140,11 +155,17 @@ export default function Home(): ReactElement {
               </span>
             </div>
           </div>
-          {!isDefault && (
-            <div className="home__account-util">
-              <AccountMenu />
-            </div>
-          )}
+          <div className="home__account-util">
+            <Button
+              className="home__account-util__rescan"
+              btnType={ButtonType.secondary}
+              tiny
+              onClick={onRescanClick}
+            >
+              {rescanning ? "Stop" : "Rescan"}
+            </Button>
+            {!isDefault && <AccountMenu />}
+          </div>
         </div>
 
         <div className="home__wallet">
@@ -173,32 +194,44 @@ export default function Home(): ReactElement {
 
         <div className="home__list" ref={listElement}>
           <div className="home__list__header">
-            <div
-              className={classNames("home__list__header__tab", {
-                "home__list__header__tab--selected": tab === "domains",
-              })}
-              onClick={() => setTab("domains")}
-            >
-              Domains
-            </div>
-            <div
-              className={classNames("home__list__header__tab", {
-                "home__list__header__tab--selected": tab === "activity",
-              })}
-              onClick={() => setTab("activity")}
-            >
-              Activity
+            <div className="home__list__header__tabs">
+              <div
+                className={classNames("home__list__header__tab", {
+                  "home__list__header__tab--selected": tab === "domains",
+                })}
+                onClick={() => setTab("domains")}
+              >
+                Domains
+              </div>
+              <div
+                className={classNames("home__list__header__tab", {
+                  "home__list__header__tab--selected": tab === "activity",
+                })}
+                onClick={() => setTab("activity")}
+              >
+                Activity
+              </div>
+              <div
+                className={classNames("home__list__header__tab", {
+                  "home__list__header__tab--selected": tab === "marketplace",
+                })}
+                onClick={() => setTab("marketplace")}
+              >
+                Market
+              </div>
             </div>
           </div>
           <div className="home__list__content">
-            {tab === "activity" ? <Transactions /> : <Domains />}
+            {tab === "activity" && <Transactions />}
+            {tab === "domains" && <Domains />}
+            {tab === "marketplace" && <Marketplace />}
           </div>
         </div>
       </div>
       <ReactTooltip
         place="bottom"
         id="getContent"
-        getContent={() => copied ? "copied!" : "copy address"}
+        getContent={() => (copied ? "copied!" : "copy address")}
       />
     </>
   );

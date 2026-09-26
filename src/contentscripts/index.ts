@@ -76,7 +76,7 @@ function installLearnHNSMarketHandler() {
       const href = link.getAttribute("href") || "";
       const payload = parseFulfillAuctionLink(href);
 
-      showLearnHNSToast("Opening Shake Wallet confirmation...");
+      showLearnHNSToast("Opening LearnHNS Wallet confirmation...");
 
       const [err] = await chrome.runtime.sendMessage({
         type: MessageTypes.SEND_SHAKEDEX_FULFILL,

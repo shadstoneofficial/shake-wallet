@@ -159,6 +159,18 @@ export const fetchWalletState = () => async (dispatch: Dispatch) => {
   });
 };
 
+export const fullRescan =
+  () => async (dispatch: ThunkDispatch<AppRootState, any, Action>) => {
+    await postMessage({type: MessageTypes.FULL_RESCAN});
+    await dispatch(fetchWalletState());
+  };
+
+export const stopRescan =
+  () => async (dispatch: ThunkDispatch<AppRootState, any, Action>) => {
+    await postMessage({type: MessageTypes.STOP_RESCAN});
+    await dispatch(fetchWalletState());
+  };
+
 export const fetchWalletBalance = () => async (dispatch: Dispatch) => {
   const balance = await postMessage({
     type: MessageTypes.GET_WALLET_BALANCE,

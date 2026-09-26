@@ -6,6 +6,8 @@ import {get, put} from '@src/util/db';
 const {states,statesByVal} = require('hsd/lib/covenants/namestate');
 const Network = require("hsd/lib/protocol/network");
 const networkType = process.env.NETWORK_TYPE || 'main';
+const ADDRESS_LOOKUP_BATCH_SIZE = 20;
+const ADDRESS_LOOKUP_MAX_RETRIES = 3;
 
 const NAME_CACHE: string[] = [];
 const NAME_MAP: {[hash: string]: string} = {};
@@ -235,11 +237,12 @@ export default class NodeService extends GenericService {
     return blockEntry;
   }
 
-  async getTXByAddresses(
+  async getTXByAddressBatch(
     addresses: string[],
     startBlock: number,
     endBlock: number,
-    transactions: any[] = []
+    transactions: any[] = [],
+    retryCount = 0
   ): Promise<any[]> {
     const headers = await this.getHeaders();
     const {apiHost} = await this.exec("setting", "getAPI");
@@ -254,26 +257,81 @@ export default class NodeService extends GenericService {
       }),
     });
 
-    const json = await resp.json();
-
-    if (apiHost.includes("api.handshakeapi.com")) {
-      if (resp.status === 200 && endBlock === json.endBlock) {
-        return transactions.concat(json.txs);
-      }
-
-      if (resp.status === 413) {
-        return this.getTXByAddresses(
-          addresses,
-          json.endBlock,
-          endBlock,
-          transactions.concat(json.txs)
-        );
-      }
-
-      throw new Error(`Unknown response status: ${resp.status}`);
-    } else {
-      return json;
+    if (resp.status === 429 && retryCount < ADDRESS_LOOKUP_MAX_RETRIES) {
+      const retryAfter = Number(resp.headers.get("Retry-After"));
+      const retryAfterMs = Number.isFinite(retryAfter) && retryAfter > 0
+        ? retryAfter * 1000
+        : 60_000;
+      await new Promise((resolve) => setTimeout(resolve, retryAfterMs));
+      return this.getTXByAddressBatch(
+        addresses,
+        startBlock,
+        endBlock,
+        transactions,
+        retryCount + 1
+      );
     }
+
+    const json = await resp.json();
+    const responseTXs = Array.isArray(json) ? json : json?.txs;
+
+    if (resp.status === 413 && Number.isSafeInteger(json?.endBlock)) {
+      if (json.endBlock <= startBlock || json.endBlock > endBlock) {
+        throw new Error("RPC returned an invalid address-history block range.");
+      }
+
+      return this.getTXByAddressBatch(
+        addresses,
+        json.endBlock,
+        endBlock,
+        transactions.concat(Array.isArray(responseTXs) ? responseTXs : [])
+      );
+    }
+
+    if (resp.status !== 200) {
+      throw new Error(`Address-history request failed with status ${resp.status}.`);
+    }
+
+    if (!Array.isArray(responseTXs))
+      throw new Error("RPC returned an invalid address-history response.");
+
+    const combined = transactions.concat(responseTXs);
+    if (Number.isSafeInteger(json?.endBlock)
+        && json.endBlock > startBlock
+        && json.endBlock < endBlock) {
+      return this.getTXByAddressBatch(
+        addresses,
+        json.endBlock,
+        endBlock,
+        combined
+      );
+    }
+
+    return combined;
+  }
+
+  async getTXByAddresses(
+    addresses: string[],
+    startBlock: number,
+    endBlock: number,
+    transactions: any[] = []
+  ): Promise<any[]> {
+    const collected = transactions.slice();
+
+    for (let offset = 0; offset < addresses.length; offset += ADDRESS_LOOKUP_BATCH_SIZE) {
+      const batch = addresses.slice(offset, offset + ADDRESS_LOOKUP_BATCH_SIZE);
+      collected.push(
+        ...(await this.getTXByAddressBatch(batch, startBlock, endBlock))
+      );
+    }
+
+    const seen = new Set<string>();
+    return collected.filter((tx) => {
+      if (typeof tx?.hash !== "string") return true;
+      if (seen.has(tx.hash)) return false;
+      seen.add(tx.hash);
+      return true;
+    });
   }
 
   async start() {

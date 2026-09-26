@@ -19,14 +19,6 @@ export const EXPLORERS: Explorer[] = [
     block: 'https://shakeshift.com/block/%s',
   },
   {
-    id: 'hns-dev',
-    label: 'hns.dev',
-    tx: 'https://explorer.hns.dev/tx/%s',
-    name: 'https://explorer.hns.dev/name/%s',
-    address: 'https://explorer.hns.dev/address/%s',
-    block: 'https://explorer.hns.dev/block/%s',
-  },
-  {
     id: 'hns-fans',
     label: 'HNS Fans',
     tx: 'https://e.hnsfans.com/tx/%s',

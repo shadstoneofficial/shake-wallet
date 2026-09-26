@@ -19,7 +19,7 @@ import {
 } from "@src/ui/components/OnboardingModal";
 import {DefaultConnectLedgerSteps} from "@src/ui/components/ConnectLedgerSteps";
 import "./onboarding.scss";
-import ShakeIcon from "@src/static/icons/shake-black.svg";
+import WalletIcon from "@src/static/icons/learnhnsicon-dark-small.svg";
 import {USB} from "hsd-ledger/lib/hsd-ledger-browser";
 import {getAppVersion, getAccountXpub} from "@src/util/withLedger";
 import {isSupported} from "@src/util/webUSB";
@@ -32,6 +32,8 @@ const {Device} = USB;
 const usb = navigator.usb;
 const ONE_MINUTE = 60000;
 const network = process.env.NETWORK_TYPE || "main";
+const LEARNHNS_WALLET_HELP_URL =
+  "https://bobwallet.org/extension/learnhns-wallet/#restore-and-address-faq";
 
 export default function Onboarding(): ReactElement {
   const [onboardingType, setOnboardingType] = useState<
@@ -155,10 +157,10 @@ function Welcome(props: {}): ReactElement {
       <OnboardingModalContent center>
         <div
           className="welcome__logo"
-          style={{backgroundImage: `url(${ShakeIcon})`}}
+          style={{backgroundImage: `url(${WalletIcon})`}}
         />
         <p>
-          <b>Hi, Welcome to Shake Wallet.</b>
+          <b>Hi, welcome to LearnHNS Wallet.</b>
         </p>
         <small className="welcome__paragraph">
           I am your Handshake Wallet in a browser extension. I can help you take
@@ -254,7 +256,7 @@ function Terms(props: {
           <strong>Terms of use</strong>
           <div className="title__detail">
             <small>
-              Please review and agree to the Shake Wallet’s terms of use.
+              Please review and agree to the LearnHNS Wallet terms of use.
             </small>
           </div>
         </div>
@@ -657,6 +659,10 @@ function ConfirmSeedphrase(props: {
     }
   }, [props.onCreateWallet]);
 
+  const openRestoreHelp = useCallback(() => {
+    window.open(LEARNHNS_WALLET_HELP_URL, "_blank", "noopener,noreferrer");
+  }, []);
+
   let disabled = false;
   const nonEmptySeeds = enteredSeeds.filter((s) => !!s);
 
@@ -694,6 +700,20 @@ function ConfirmSeedphrase(props: {
             </small>
           </div>
         </div>
+
+        {props.isImporting && (
+          <div className="restore-notice">
+            <strong>Restored wallets can show a different address first.</strong>
+            <small>
+              Your seed can derive many receive, change, and account addresses.
+              If HNS or names are missing after import, let the wallet sync and
+              rescan before assuming the seed is wrong.
+            </small>
+            <button type="button" onClick={openRestoreHelp}>
+              Restore and address FAQ
+            </button>
+          </div>
+        )}
 
         <div className="reveal-seed">
           {Array(24)

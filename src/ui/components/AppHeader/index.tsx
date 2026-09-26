@@ -1,7 +1,7 @@
 import React, {ReactElement, useCallback} from "react";
 import ReactTooltip from "react-tooltip";
-import ShakeIcon from "../../../static/icons/shake-black.svg";
-import ShakeMoveIcon from "../../../static/icons/shake-moves.svg";
+import WalletIcon from "../../../static/icons/learnhnsicon-dark-small.svg";
+import WalletMoveIcon from "../../../static/icons/learnhns-animated.svg";
 import "./app-header.scss";
 import Icon from "@src/ui/components/Icon";
 import WalletMenu from "@src/ui/components/WalletMenu";
@@ -11,6 +11,7 @@ import {useWalletState} from "@src/ui/ducks/wallet";
 import {useCurrentBlockHeight} from "@src/ui/ducks/node";
 import {getExplorerUrl} from "@src/util/explorer";
 import {useExplorer} from "@src/ui/ducks/app";
+import {useHistory} from "react-router";
 
 export default function AppHeader(): ReactElement {
   const {rescanning} = useWalletState();
@@ -18,6 +19,7 @@ export default function AppHeader(): ReactElement {
   const shakeMoving = useShakeMoving();
   const currentBlockHeight = useCurrentBlockHeight();
   const explorer = useExplorer();
+  const history = useHistory();
 
   const handleBlockClick = useCallback(() => {
     window.open(
@@ -35,14 +37,14 @@ export default function AppHeader(): ReactElement {
               className={classNames("app-header__shake-icon", {
                 "app-header__shake-icon--moving": rescanning || shakeMoving,
               })}
-              url={ShakeIcon}
+              url={WalletIcon}
               size={2.5}
             />
             <Icon
               className={classNames("app-header__shake-move-icon", {
                 "app-header__shake-move-icon--moving": rescanning || shakeMoving,
               })}
-              url={ShakeMoveIcon}
+              url={WalletMoveIcon}
               size={2.625}
             />
           </div>
@@ -61,6 +63,17 @@ export default function AppHeader(): ReactElement {
           </div>
         </div>
         <div className="app-header__r">
+          <button
+            className="app-header__settings-button"
+            type="button"
+            title="Settings"
+            aria-label="Settings"
+            data-for="settings-tip"
+            data-tip
+            onClick={() => history.push("/settings")}
+          >
+            <Icon fontAwesome="fa-cog" size={1.1} />
+          </button>
           <WalletMenu />
         </div>
       </div>
@@ -69,6 +82,12 @@ export default function AppHeader(): ReactElement {
         place="bottom"
         type="light"
         getContent={() => shakeMessage || "Welcome back!"}
+      />
+      <ReactTooltip
+        id="settings-tip"
+        place="bottom"
+        type="light"
+        getContent={() => "Settings"}
       />
     </>
   );

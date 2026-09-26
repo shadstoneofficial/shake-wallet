@@ -43,7 +43,15 @@
     }
 
     &-util {
-      
+      @extend %row-nowrap;
+      align-items: center;
+      flex: 0 0 auto;
+      gap: 0.5rem;
+      margin-left: 0.75rem;
+
+      &__rescan {
+        min-width: 4.25rem;
+      }
     }
   }
 
@@ -131,23 +139,36 @@
 
     &__header {
       @extend %row-nowrap;
+      align-items: center;
+      border-bottom: 1px solid variables.$border-gray;
+      padding-right: 0.75rem;
+
+      &__tabs {
+        @extend %row-nowrap;
+        flex: 1 1 auto;
+      }
 
       &__tab {
         @extend %row-nowrap;
         @extend %clickable;
         @extend %lite-font;
-        flex: 1 1 auto;
         align-items: center;
         justify-content: center;
-        border-bottom: 1px solid variables.$border-gray;
         color: variables.$label-text;
         font-weight: 600;
         padding: 1rem 1.5rem;
+        border-bottom: 1px solid transparent;
+        margin-bottom: -1px;
+        flex: 1 1 auto;
+      }
 
-        &--selected {
-          color: variables.$black;
-          border-color: variables.$primary-blue;
-        }
+      &__tab--selected {
+        color: variables.$black;
+        border-color: variables.$primary-blue;
+      }
+
+      &__rescan {
+        flex: 0 0 auto;
       }
     }
 

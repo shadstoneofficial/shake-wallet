@@ -1,0 +1,43 @@
+@use "../../../../src/util/variables";
+
+.sell-listing {
+  .regular-view__header {
+    &__l {
+      @extend %row-nowrap;
+      align-items: center;
+
+      .icon {
+        margin-right: 1rem;
+      }
+    }
+  }
+
+  &__panel {
+    @extend %col-nowrap;
+    align-items: flex-start;
+    gap: 0.75rem;
+  }
+
+  &__icon {
+    @extend %row-nowrap;
+    align-items: center;
+    border: 1px solid variables.$black;
+    border-radius: 50%;
+    height: 3rem;
+    justify-content: center;
+    width: 3rem;
+  }
+
+  h2 {
+    @extend %h3-font;
+    color: variables.$primary-text;
+    font-weight: 600;
+    margin: 0.25rem 0 0;
+  }
+
+  p {
+    @extend %regular-font;
+    color: variables.$secondary-text;
+    margin: 0;
+  }
+}

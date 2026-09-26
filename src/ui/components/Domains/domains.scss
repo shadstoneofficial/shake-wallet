@@ -12,11 +12,20 @@
   }
 
   &__empty {
+    @extend %col-nowrap;
+    align-items: center;
+    gap: 0.25rem;
     text-align: center;
     margin: 1rem auto;
     @extend %regular-font;
     font-weight: 700;
     color: variables.$border-gray;
+
+    small {
+      max-width: 16rem;
+      color: variables.$secondary-text;
+      font-weight: 400;
+    }
   }
 }
 
@@ -73,7 +82,29 @@
     }
 
     &__action {
-      flex: 1 1 auto;
+      @extend %flex;
+      @extend %clickable;
+      align-items: center;
+      justify-content: center;
+      background: transparent;
+      border: 1px solid transparent;
+      border-radius: 50%;
+      color: variables.$secondary-text;
+      height: 2rem;
+      padding: 0;
+      width: 2rem;
+      transition: background-color 150ms ease-in-out, color 150ms ease-in-out;
+
+      &:hover,
+      &:focus {
+        background-color: rgba(variables.$black, 0.05);
+        color: variables.$primary-text;
+        outline: none;
+      }
+
+      &:active {
+        background-color: rgba(variables.$black, 0.1);
+      }
     }
   }
 }
